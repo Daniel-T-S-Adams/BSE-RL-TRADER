@@ -1,14 +1,13 @@
 import gymnasium as gym
-from environment import AuctionEnv
+from environment import AuctionEnv, lob
 
 # Register the gymnasium environment
 gym.register(
     id='Auction-v0',
     entry_point='__main__:AuctionEnv',
-    max_episode_steps=100
 )
 
-env = gym.make('Auction-v0')
+env = gym.make('Auction-v0', lob=lob)
 obs = env.reset()
 print(obs)
 
