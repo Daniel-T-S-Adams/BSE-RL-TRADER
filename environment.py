@@ -29,7 +29,7 @@ class AuctionEnv(gym.Env):
         if np.random.randint(2) == 0:
             self.trader_type = 'Buyer'
         else:
-            self.trader_type = 'Buyer'
+            self.trader_type = 'Seller'
 
     # Generates a customer order that is a random
     # integer from the given range
@@ -75,7 +75,6 @@ class AuctionEnv(gym.Env):
         
         observation = np.zeros(self.observation_space.shape)
         reward = self.calculate_reward(action)
-        # reward = 1.0
 
         terminated = True
         truncated = True

@@ -63,8 +63,7 @@ class Trader():
 def monte_carlo_eval(
         env,
         config,
-        q_table,
-        render=False):
+        q_table):
     """
     Evaluate configuration of MC on given environment when initialised with given Q-table
 
@@ -81,11 +80,8 @@ def monte_carlo_eval(
         epsilon=0.0,
     )
     eval_agent.q_table = q_table
-    if render:
-        eval_env = gym.make(CONFIG["env"], render_mode="human")
-    else:
-        eval_env = env
-    return evaluate(eval_env, eval_agent, config["eval_eps_max_steps"], config["eval_episodes"])
+
+    return evaluate(env, eval_agent, config["eval_eps_max_steps"], config["eval_episodes"])
 
 
 
