@@ -7,8 +7,9 @@ from gymnasium import spaces
 import numpy as np
 import csv
 
-class Environment(gym.Env):
+class AuctionEnv(gym.Env):
     def __init__(self, price_range=[100, 200], n_values=10):
+        super(AuctionEnv, self).__init__()
         self.min_price = price_range[0]
         self.max_price = price_range[1]
         self.price_range = price_range[1] - price_range[0]
@@ -76,78 +77,40 @@ class Environment(gym.Env):
         reward = 1.0
 
         terminated = True
+        truncated = False
+        info = {}
 
-        return observation, reward, terminated
+        return observation, reward, terminated, truncated, info
 
 
-    def reset(self):
+    def reset(self, seed=None, options=None):
+        # We need the following line to seed self.np_random
+        super().reset(seed=seed)
 
-        best_bid = random.randrange(105, 200, 10)
-        best_ask = random.randrange(105, 200, 10)
-        worst_bid = random.randrange(100, 200, 10)
-        worst_ask = random.randrange(110, 200, 10)
+        step = int(self.price_range / self.n_values)
+        
+        best_bid = random.randrange(self.min_price, self.max_price, step)
+        best_ask = random.randrange(self.min_price+step, self.max_price+step, step)
 
-        return [best_bid, best_ask, worst_bid, worst_ask]
+        # these two need to be changed so that the 
+        # worst_bid < best_bid and worst_ask > best_ask
+        worst_bid = random.randrange(self.min_price, self.max_price, step)
+        worst_ask = random.randrange(self.min_price+step, self.max_price+step, step)
+
+        obs = np.array([best_bid, best_ask, worst_bid, worst_ask])
+        info = {}
+
+        return obs, info
 
 
 # file_path = 'bse_d010_i15_0001_LOB_frames.csv'
-raya = Environment()
-raya.initialise_trader()
+# raya = AuctionEnv()
+# raya.initialise_trader()
 
-obs = raya.reset()
-print(obs)
-for _ in range(10):
-    action = raya.action_space.sample()
-    # print(action)
-    print(raya.step(action)) # take a random action
+# obs = raya.reset()
+# print(obs)
 
-
-
-# if __name__ == "__main__":
-#     n_days = 10
-#     start_time = 0.0
-#     end_time = 60.0
-#     duration = end_time - start_time
-
-#     range1 = (50, 150)
-#     supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
-
-#     range2 = (50, 150)
-#     demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
-
-#     # new customer orders arrive at each trader approx once every order_interval seconds
-#     order_interval = 15
-
-#     order_sched = {'sup': supply_schedule, 'dem': demand_schedule,
-#                     'interval': order_interval, 'timemode': 'drip-poisson'}
-
-#     verbose = False
-
-#     # n_trials is how many trials (i.e. market sessions) to run in total
-#     n_trials = 1
-
-#     # n_recorded is how many trials (i.e. market sessions) to write full data-files for
-#     n_trials_recorded = 5
-
-#     trial = 1
-
-#     while trial < (n_trials+1):
-
-#         # create unique i.d. string for this trial
-#         trial_id = 'bse_d%03d_i%02d_%04d' % (n_days, order_interval, trial)
-
-#         buyers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10)]
-#         sellers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10)]
-
-#         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
-
-#         if trial > n_trials_recorded:
-#             dump_flags = {'dump_blotters': False, 'dump_lobs': False, 'dump_strats': False,
-#                             'dump_avgbals': False, 'dump_tape': False}
-#         else:
-#             dump_flags = {'dump_blotters': True, 'dump_lobs': False, 'dump_strats': True,
-#                             'dump_avgbals': True, 'dump_tape': True}
-
-#         market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose)
-
-#         trial = trial + 1
+# for _ in range(10):
+#     action = raya.action_space.sample()
+#     # print(action)
+#     print(raya.step(action)) # take a random action

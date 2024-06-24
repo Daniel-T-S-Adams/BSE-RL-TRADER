@@ -1,6 +1,6 @@
 import numpy as np 
 import environment
-from environment import Environment
+from environment import AuctionEnv
 from typing import Dict, DefaultDict
 import gymnasium as gym
 from gymnasium import Space
