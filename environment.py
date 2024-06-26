@@ -1,5 +1,5 @@
 import BSE
-from BSE import Exchange, market_session
+from BSE import Exchange, Trader, market_session
 import random
 from typing import Dict
 import gymnasium as gym
@@ -8,16 +8,20 @@ import numpy as np
 import csv
 
 class AuctionEnv(gym.Env):
-    def __init__(self, lob, price_range=[100, 200], n_values=10):
+    def __init__(self, lob, price_range=[100, 200], bins=5):
         super(AuctionEnv, self).__init__()
-        self.min_price = price_range[0]
-        self.max_price = price_range[1]
-        self.price_range = price_range[1] - price_range[0]
-        self.trader_type = None
-        self.order = 0
-        self.n_values = n_values
+        self.bins = bins
+        # self.price_range = price_range[1] - price_range[0]
+  
+        self.trader_type = 'Buyer'
+        self.start_time = BSE.start_time
+        self.end_time = BSE.end_time
+        self.time_interval = self.end_time - self.start_time
+        self.order_range = BSE.demand_schedule['ranges'][1] - BSE.demand_schedule['ranges'][0]
+        self.min_price = self.order_range[0]
+        self.max_price = self.order_range[1]
 
-        self.observation_space = spaces.MultiDiscrete([n_values, n_values, n_values, n_values])
+        self.observation_space = spaces.MultiDiscrete([int(self.time_interval), self.order_range, bins, bins, bins, bins])
         
         self.action_space = spaces.Discrete(self.price_range, start=self.min_price)
 
@@ -71,8 +75,13 @@ class AuctionEnv(gym.Env):
         return reward
 
     
+    def _get_obs(self):
+        return np.array([self.time, self.order, self.best_bid, self.best_ask, self.worst_bid, self.worst_ask])
+
+
     def step(self, action):
-        
+        self.time +=1
+
         observation = np.zeros(self.observation_space.shape)
         reward = self.calculate_reward(action)
 
