@@ -94,10 +94,10 @@ class AuctionEnv(gym.Env):
         best_bid = random.randrange(self.min_price, self.max_price, step)
         best_ask = random.randrange(self.min_price+step, self.max_price+step, step)
 
-        # these two need to be changed so that the 
+        # Randomly sets worst bid and ask such that
         # worst_bid < best_bid and worst_ask > best_ask
-        worst_bid = random.randrange(self.min_price, self.max_price, step)
-        worst_ask = random.randrange(self.min_price+step, self.max_price+step, step)
+        worst_bid = random.randrange(self.min_price, best_bid+step, step)
+        worst_ask = random.randrange(best_ask, self.max_price+step, step)
 
         obs = np.array([best_bid, best_ask, worst_bid, worst_ask])
         info = {}
