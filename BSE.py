@@ -433,7 +433,7 @@ class Trader:
         self.profit_mintime = 60    # minimum duration in seconds for calculating profitpertime
         self.n_trades = 0           # how many trades has this trader done?
         self.lastquote = None       # record of what its last quote was
-
+        
     def __str__(self):
         return '[TID %s type %s balance %s blotter %s orders %s n_trades %s profitpertime %s]' \
                % (self.tid, self.ttype, self.balance, self.blotter, self.orders, self.n_trades, self.profitpertime)

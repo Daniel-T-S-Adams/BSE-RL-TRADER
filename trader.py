@@ -32,13 +32,13 @@ class RLAgent(Trader):
         self.action_space = action_space
         self.obs_space = obs_space
         self.num_actions = spaces.flatdim(action_space)
-
+        
         self.gamma: float = gamma
         self.epsilon: float = epsilon
 
         self.q_table: DefaultDict = defaultdict(lambda: 0)
         self.sa_counts = {}
-
+        
     # implement epsilon-greedy action selection
     def act(self, obs: int) -> int:
         obs = tuple(obs)
@@ -76,6 +76,8 @@ class RLAgent(Trader):
         return updated_values
     
 
+    # We need to be allowed to give obs as an input parameter so that
+    # the agent can pick the best action given the current state
     def getorder(self, time, countdown, lob):        
         if len(self.orders) < 1:
             order = None
