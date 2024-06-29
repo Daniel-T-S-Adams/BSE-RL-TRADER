@@ -2387,8 +2387,8 @@ if __name__ == "__main__":
     # 1000 days is good, but 3*365=1095, so may as well go for three years.
     n_days = 10
     start_time = 0.0
-    end_time = 60.0 * 60.0 * 24 * n_days
-    # end_time = 60.0
+    # end_time = 60.0 * 60.0 * 24 * n_days
+    end_time = 60.0
     duration = end_time - start_time
 
     # schedule_offsetfn returns time-dependent offset, to be added to schedule prices

@@ -1,7 +1,6 @@
 import numpy as np 
 import random
 import environment
-from environment import AuctionEnv, lob
 import BSE
 from BSE import Trader, Order
 from typing import List, Dict, DefaultDict
@@ -13,8 +12,10 @@ from tqdm import tqdm
 
 
 class RLAgent(Trader):
-    def __init__(self, action_space: Space, obs_space: Space,
-                 gamma: 0.0, epsilon: 0.1):
+    def __init__(self, ttype, tid, balance, params, time, action_space: spaces.Space, 
+                 obs_space: spaces.Space, gamma=1.0, epsilon=0.1):
+        
+        super().__init__(ttype, tid, balance, params, time)
         # self.ttype = ttype          # what type / strategy this trader is
         # self.tid = tid              # trader unique ID code
         # self.balance = balance      # money in the bank

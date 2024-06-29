@@ -9,32 +9,38 @@ from gymnasium import spaces
 import numpy as np
 import csv
 
-class AuctionEnv(gym.Env, Trader):
-    def __init__(self, action_space: Space, obs_space: Space, gamma: 0.0, epsilon: 0.1, bins=5):
-        # Initialise both parent classes
-        gym.Env.__init__(self)
-        Trader.__init__(self, action_space, obs_space, gamma, epsilon)
-
+class AuctionEnv(gym.Env):
+    def __init__(self, action_space: Space, obs_space: Space, gamma: 1.0, epsilon: 0.1, bins=10):
+        super().__init__()
+        self.trader = RLAgent(
+            ttype='RLAgent', tid='T1', balance=1000, params={}, time=0, 
+            action_space=action_space, obs_space=obs_space, gamma=gamma, epsilon=epsilon
+            )
+        
+        # self.trader.orders = [(26,1)]
+        # self.trader.blotter = [{'time': 0, 'price': 25}, {'time': 1, 'price': 29}]
+        
         self.bins = bins
-        # self.price_range = price_range[1] - price_range[0]
-
+        
         self.trader_type = 'Buyer'
-        self.start_time = BSE.start_time
-        self.end_time = BSE.end_time
+        self.start_time = 0.0
+        self.end_time = 60.0
         self.time_interval = self.end_time - self.start_time
-        self.order_range = BSE.demand_schedule['ranges'][1] - BSE.demand_schedule['ranges'][0]
+        # self.order_range = BSE.demand_schedule['ranges'][1] - BSE.demand_schedule['ranges'][0]
+        self.order_range = (50, 150)
+        self.range = self.order_range[1] - self.order_range[0]
         self.min_price = self.order_range[0]
         self.max_price = self.order_range[1]
         self.time = 0
-        self.order = 0
+        self.order = self.trader.orders[0][0]
         self.best_bid = 0
         self.best_ask = 0
         self.worst_bid = 0
         self.worst_ask = 0
-        self.state = None
-
-        self.observation_space = spaces.MultiDiscrete([int(self.time_interval), self.order_range, bins, bins, bins, bins])
-        self.action_space = spaces.Discrete(self.price_range, start=self.min_price)
+        # self.state = None
+        
+        self.observation_space = spaces.MultiDiscrete([int(self.time_interval), self.range, bins, bins, bins, bins])
+        self.action_space = spaces.Discrete(self.range, start=self.min_price)
 
 
     # Randomly activate trader as a buyer or seller
@@ -43,12 +49,6 @@ class AuctionEnv(gym.Env, Trader):
             self.trader_type = 'Buyer'
         else:
             self.trader_type = 'Seller'
-
-    # Generates a customer order that is a random
-    # integer from the given range
-    # should the orders be normally distributed?
-    def get_order(self):
-        self.order = np.random.randint(self.min_price, self.max_price+1)
 
 
     def calculate_reward(self, quote):
@@ -123,23 +123,23 @@ class AuctionEnv(gym.Env, Trader):
 
 
     def step(self, action):
-        last_trade_time = self.blotter[-1]['time']
-        self.set_additional_params(lob)
-
+        last_trade_time = self.trader.blotter[-1]['time']
+        self.set_additional_params(self.lob)
+        
         # We have a new customer order
-        if self.orders[0] != self.order:
+        if self.trader.orders[0][0] != self.order:
             terminated = True
             # Check if there was a trade
             if last_trade_time == self.time:
-                transaction_price = self.blotter[-1]['price']
-                reward = self.orders[0].price - transaction_price
+                transaction_price = self.trader.blotter[-1]['price']
+                reward = self.trader.orders[0][0] - transaction_price
 
             self.time += 1
-            self.order = self.orders[0]                                                        # Update to new customer order
-            self.best_bid = self.bin_average(lob['bids']['best'])                              # Update best bid
-            self.best_ask = self.bin_average(lob['asks']['best'])                              # Update best ask
-            self.worst_bid = self.bin_average(lob['bids']['worst'])                            # Update worst bid
-            self.worst_ask = self.bin_average(lob['asks']['worst'])                            # Update worst ask
+            self.order = self.trader.orders[0][0]                                                        # Update to new customer order
+            self.best_bid = self.bin_average(self.lob['bids']['best'])                         # Update best bid
+            self.best_ask = self.bin_average(self.lob['asks']['best'])                         # Update best ask
+            self.worst_bid = self.bin_average(self.lob['bids']['worst'])                       # Update worst bid
+            self.worst_ask = self.bin_average(self.lob['asks']['worst'])                       # Update worst ask
             # self.avg_bid = self.calc_average_price(lob['bids']['lob'])                       # Calculate new average big
             # self.avg_ask = self.calc_average_price(lob['asks']['lob'])                       # Calculate new average ask
             observation = np.array([self.time, self.order, self.best_bid, 
@@ -162,21 +162,24 @@ class AuctionEnv(gym.Env, Trader):
     def reset(self, seed=None, options=None):
         # We need the following line to seed self.np_random
         super().reset(seed=seed)
-        
-        step = int(self.price_range / self.n_values)
-        
-        best_bid = random.randrange(self.min_price, self.max_price, step)
-        best_ask = random.randrange(self.min_price+step, self.max_price+step, step)
-
-        # Randomly sets worst bid and ask such that
-        # worst_bid < best_bid and worst_ask > best_ask
-        worst_bid = random.randrange(self.min_price, best_bid+step, step)
-        worst_ask = random.randrange(best_ask, self.max_price+step, step)
-
-        obs = np.array([best_bid, best_ask, worst_bid, worst_ask])
         info = {}
 
-        return obs, info
+        # Trading window ended so reset all values
+        if self.time == self.end_time:
+            observation = np.zeros(6)
+            return observation, info
+        
+        self.order = self.trader.orders[0][0]                                                 # Update to new customer order
+        self.best_bid = self.bin_average(self.lob['bids']['best'])                         # Update best bid
+        self.best_ask = self.bin_average(self.lob['asks']['best'])                         # Update best ask
+        self.worst_bid = self.bin_average(self.lob['bids']['worst'])                       # Update worst bid
+        self.worst_ask = self.bin_average(self.lob['asks']['worst'])                       # Update worst ask
+        # self.avg_bid = self.calc_average_price(lob['bids']['lob'])                       # Calculate new average big
+        # self.avg_ask = self.calc_average_price(lob['asks']['lob'])                       # Calculate new average ask
+        observation = np.array([self.time, self.order, self.best_bid, 
+                                self.best_ask, self.worst_bid, self.worst_ask])
+
+        return observation, info
 
 
 def csv_to_dict(file_path):
@@ -243,9 +246,9 @@ def csv_to_dict(file_path):
         return data_dict
 
 
-file_path = 'data.csv'
-lob = csv_to_dict(file_path)
-raya = AuctionEnv(lob, price_range=[0,500])
+# file_path = 'data.csv'
+# lob = csv_to_dict(file_path)
+# raya = AuctionEnv()
 
 # obs = raya.reset()
 # print(obs)
