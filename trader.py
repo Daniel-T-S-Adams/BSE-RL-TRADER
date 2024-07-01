@@ -1,6 +1,5 @@
 import numpy as np 
 import random
-import environment
 import BSE
 from BSE import Trader, Order
 from typing import List, Dict, DefaultDict
@@ -16,29 +15,20 @@ class RLAgent(Trader):
                  obs_space: spaces.Space, gamma=1.0, epsilon=0.1):
         
         super().__init__(ttype, tid, balance, params, time)
-        # self.ttype = ttype          # what type / strategy this trader is
-        # self.tid = tid              # trader unique ID code
-        # self.balance = balance      # money in the bank
-        # self.params = params        # parameters/extras associated with this trader-type or individual trader.
-        # self.blotter = []           # record of trades executed
-        # self.blotter_length = 100   # maximum length of blotter
-        # self.orders = []            # customer orders currently being worked (fixed at len=1 in BSE1.x)
-        # self.n_quotes = 0           # number of quotes live on LOB
-        # self.birthtime = time       # used when calculating age of a trader/strategy
-        # self.profitpertime = 0      # profit per unit time
-        # self.profit_mintime = 60    # minimum duration in seconds for calculating profitpertime
-        # self.n_trades = 0           # how many trades has this trader done?
-        # self.lastquote = None       # record of what its last quote was
-        
         self.action_space = action_space
         self.obs_space = obs_space
-        self.num_actions = spaces.flatdim(action_space)
-        
         self.gamma: float = gamma
         self.epsilon: float = epsilon
 
+        self.num_actions = spaces.flatdim(action_space)
         self.q_table: DefaultDict = defaultdict(lambda: 0)
         self.sa_counts = {}
+        self.current_obs = None
+
+    
+    def set_obs(self, obs):
+        self.current_obs = obs
+
         
     # implement epsilon-greedy action selection
     def act(self, obs: int) -> int:
@@ -52,7 +42,7 @@ class RLAgent(Trader):
 
 
     def learn(self, obs: List[int], actions: List[int], rewards: List[float]) -> Dict:
-
+        
         traj_length = len(rewards)
         G = 0
         state_action_list = list(zip(obs, actions))
@@ -85,6 +75,7 @@ class RLAgent(Trader):
         else:
             order_type = self.orders[0].otype
             # return the best action following a greedy policy
+            obs = tuple(self.current_obs)
             quote = max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
 
         order = Order(self.tid, order_type, quote, self.orders[0].qty, time, lob['QID'])

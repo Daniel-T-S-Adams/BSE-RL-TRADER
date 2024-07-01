@@ -24,7 +24,7 @@ class AuctionEnv(gym.Env):
         
         self.trader_type = 'Buyer'
         self.start_time = 0.0
-        self.end_time = 60.0
+        self.end_time = 30.0
         self.time_interval = self.end_time - self.start_time
         # self.order_range = BSE.demand_schedule['ranges'][1] - BSE.demand_schedule['ranges'][0]
         self.order_range = (50, 150)
@@ -37,7 +37,6 @@ class AuctionEnv(gym.Env):
         self.best_ask = 0
         self.worst_bid = 0
         self.worst_ask = 0
-        # self.state = None
         
         self.observation_space = spaces.MultiDiscrete([int(self.time_interval), self.range, bins, bins, bins, bins])
         self.action_space = spaces.Discrete(self.range, start=self.min_price)
@@ -155,6 +154,7 @@ class AuctionEnv(gym.Env):
         
         truncated = False
         info = {}
+        self.trader.set_obs(observation)
 
         return observation, reward, terminated, truncated, info
 
@@ -178,6 +178,7 @@ class AuctionEnv(gym.Env):
         # self.avg_ask = self.calc_average_price(lob['asks']['lob'])                       # Calculate new average ask
         observation = np.array([self.time, self.order, self.best_bid, 
                                 self.best_ask, self.worst_bid, self.worst_ask])
+        self.trader.set_obs(observation)
 
         return observation, info
 
