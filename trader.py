@@ -77,8 +77,9 @@ class RLAgent(Trader):
             obs = tuple(self.current_obs)
             quote = max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
 
-        order = Order(self.tid, order_type, quote, self.orders[0].qty, time, lob['QID'])
+            order = Order(self.tid, order_type, quote, self.orders[0].qty, time, lob['QID'])
 
         return order
+
 
 

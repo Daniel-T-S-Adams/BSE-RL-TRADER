@@ -2,8 +2,7 @@ import numpy as np
 import random
 import environment
 from environment import AuctionEnv
-import BSE
-from BSE import Trader
+from BSE import market_session
 from trader import RLAgent
 from evaluate import evaluate
 from typing import List, Dict, DefaultDict
@@ -121,5 +120,7 @@ gym.register(
 )
 
 if __name__ == "__main__":
-    env = gym.make(CONFIG["env"], action_space=spaces.Discrete(100), obs_space=spaces.MultiDiscrete([24, 100, 5, 5, 5, 5]), gamma=1.0, epsilon=0.1, bins=10)
+    env = gym.make(CONFIG["env"], action_space=spaces.Discrete(100), 
+                   obs_space=spaces.MultiDiscrete([24, 100, 5, 5, 5, 5, 5, 5]), 
+                   gamma=1.0, epsilon=0.1, bins=10)
     total_reward, _, _, q_table = train(env, CONFIG)

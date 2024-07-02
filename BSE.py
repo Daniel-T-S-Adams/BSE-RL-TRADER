@@ -1820,6 +1820,11 @@ class RLAgent(Trader):
         self.sa_counts = {}
         self.current_obs = None
 
+        # Trajectory storage
+        self.obs_list = []
+        self.act_list = []
+        self.rew_list = []
+
     
     def set_obs(self, obs):
         self.current_obs = obs
@@ -1827,7 +1832,7 @@ class RLAgent(Trader):
         
     # implement epsilon-greedy action selection
     def act(self, obs: int) -> int:
-        obs = tuple(obs)
+        # obs = tuple(obs)
         if random.uniform(0, 1) < self.epsilon:
             # Explore - sample a random action
             return self.action_space.sample()
@@ -1837,33 +1842,28 @@ class RLAgent(Trader):
             return max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
 
 
-    def learn(self, obs: List[int], actions: List[int], rewards: List[float]) -> Dict:
-        traj_length = len(rewards)
+    def learn(self) -> Dict:
+        traj_length = len(self.rew_list)
         G = 0
-        state_action_list = list(zip(obs, actions))
+        state_action_list = list(zip(self.obs_list, self.act_list))
         updated_values = {}
         
-        # Iterate over the trajectory backwards
         for t in range(traj_length - 1, -1, -1):
-            state_action_pair = (tuple(obs[t]), actions[t])
+            state_action_pair = (self.obs_list[t], self.act_list[t])
 
-            # Check if this is the first visit to the state-action pair
             if state_action_pair not in state_action_list[:t]:
-                G = self.gamma*G + rewards[t]
+                G = self.gamma * G + self.rew_list[t]
 
-                # Monte-Carlo update rule
                 self.sa_counts[state_action_pair] = self.sa_counts.get(state_action_pair, 0) + 1
                 self.q_table[state_action_pair] += (
                     G - self.q_table[state_action_pair]
-                    ) / self.sa_counts.get(state_action_pair, 0)
+                ) / self.sa_counts.get(state_action_pair, 0)
                 
                 updated_values[state_action_pair] = self.q_table[state_action_pair]
       
         return updated_values
     
 
-    # We need to be allowed to give obs as an input parameter so that
-    # the agent can pick the best action given the current state
     def getorder(self, time, countdown, lob):     
         if len(self.orders) < 1:
             order = None
@@ -1876,6 +1876,24 @@ class RLAgent(Trader):
             order = Order(self.tid, order_type, quote, self.orders[0].qty, time, lob['QID'])
 
         return order
+    
+
+    def respond(self, time, lob, trade, verbose):
+        self.profitpertime = self.profitpertime_update(time, self.birthtime, self.balance)
+        
+        # Collect data
+        self.obs_list.append(self.current_obs)
+        self.act_list.append(self.act(self.current_obs))
+        self.rew_list.append(trade['price'] if trade else 0)  # Assuming reward is the trade price
+        
+        if trade:  # Assuming trade marks the end of an episode
+            self.learn()
+            self.obs_list = []
+            self.act_list = []
+            self.rew_list = []
+        
+        # return updated_values
+        return None
 
 
 
@@ -1958,7 +1976,7 @@ def populate_market(traders_spec, traders, shuffle, verbose):
         elif robottype == 'PRDE':
             return Trader_PRZI('PRDE', name, balance, parameters, time0)
         elif robottype == 'RL':
-            return RLAgent('RL', name, balance, parameters, time0, action_space=spaces.Discrete(100), obs_space=spaces.MultiDiscrete([24, 100, 5, 5, 5, 5]))
+            return RLAgent('RL', name, balance, parameters, time0, action_space=spaces.Discrete(100), obs_space=spaces.MultiDiscrete([24, 100, 5, 5, 5, 5, 5, 5]))
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 
@@ -2435,9 +2453,6 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
                 dump_strats_frame(time, strat_dump, traders)
                 # record that we've written this frame
                 frames_done.add(int(time))
-
-            if traders[t].ttype == 'RL':
-                print(traders[t].tid)
 
         time = time + timestep
 
