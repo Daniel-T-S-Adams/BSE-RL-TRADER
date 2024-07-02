@@ -54,6 +54,7 @@ import random
 import os
 import time as chrono
 
+import csv
 from typing import List, Dict, DefaultDict
 import gymnasium as gym
 from gymnasium import Space
@@ -1806,8 +1807,10 @@ class Trader_ZIP(Trader):
 
 
 class RLAgent(Trader):
-    def __init__(self, ttype, tid, balance, params, time, action_space: spaces.Space, 
-                 obs_space: spaces.Space, gamma=1.0, epsilon=0.1):
+    def __init__(self, ttype, tid, balance, params, time, 
+                 action_space: spaces.Space, obs_space: spaces.Space, 
+                 q_table: DefaultDict = defaultdict(lambda: 0), 
+                 gamma=1.0, epsilon=0.1):
         
         super().__init__(ttype, tid, balance, params, time)
         self.action_space = action_space
@@ -1816,7 +1819,7 @@ class RLAgent(Trader):
         self.epsilon: float = epsilon
 
         self.num_actions = spaces.flatdim(action_space)
-        self.q_table: DefaultDict = defaultdict(lambda: 0)
+        self.q_table: DefaultDict = q_table
         self.sa_counts = {}
         self.current_obs = None
 
@@ -1846,7 +1849,7 @@ class RLAgent(Trader):
         traj_length = len(self.rew_list)
         G = 0
         state_action_list = list(zip(self.obs_list, self.act_list))
-        updated_values = {}
+        # updated_values = {}
         
         for t in range(traj_length - 1, -1, -1):
             state_action_pair = (self.obs_list[t], self.act_list[t])
@@ -1859,12 +1862,31 @@ class RLAgent(Trader):
                     G - self.q_table[state_action_pair]
                 ) / self.sa_counts.get(state_action_pair, 0)
                 
-                updated_values[state_action_pair] = self.q_table[state_action_pair]
+                # updated_values[state_action_pair] = self.q_table[state_action_pair]
       
-        return updated_values
-    
+        return self.q_table
 
+
+    def dump_action_values(self, q_table: DefaultDict, file_path: str):
+        """
+        Save the Q-table to a CSV file.
+
+        :param q_table (DefaultDict): The Q-table to save.
+        :param file_path (str): The path to the file where the Q-table will be saved.
+        """
+        with open(file_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['State', 'Action', 'Q-Value'])     # Write the header
+            
+            # Write the Q-table entries
+            for (state, action), q_value in q_table.items():
+                writer.writerow([state, action, q_value])
+
+    
     def getorder(self, time, countdown, lob):     
+        if countdown < 10.0:
+            self.dump_action_values(self.q_table, 'q_table.csv')
+
         if len(self.orders) < 1:
             order = None
 
@@ -1884,9 +1906,9 @@ class RLAgent(Trader):
         # Collect data
         self.obs_list.append(self.current_obs)
         self.act_list.append(self.act(self.current_obs))
-        self.rew_list.append(trade['price'] if trade else 0)  # Assuming reward is the trade price
+        self.rew_list.append(trade['price'] if trade else 0)
         
-        if trade:  # Assuming trade marks the end of an episode
+        if trade:
             self.learn()
             self.obs_list = []
             self.act_list = []
