@@ -1,6 +1,5 @@
 import numpy as np 
 import random
-import BSE
 from BSE import Trader, Order
 from typing import List, Dict, DefaultDict
 import gymnasium as gym

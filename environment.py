@@ -17,9 +17,6 @@ class AuctionEnv(gym.Env):
             action_space=action_space, obs_space=obs_space, gamma=gamma, epsilon=epsilon
             )
         
-        # self.trader.orders = [(26,1)]
-        # self.trader.blotter = [{'time': 0, 'price': 25}, {'time': 1, 'price': 29}]
-        
         self.bins = bins
         
         self.trader_type = 'Buyer'
@@ -37,8 +34,11 @@ class AuctionEnv(gym.Env):
         self.best_ask = 0
         self.worst_bid = 0
         self.worst_ask = 0
+        self.avg_bid = 0
+        self.avg_ask = 0
         
-        self.observation_space = spaces.MultiDiscrete([int(self.time_interval), self.range, bins, bins, bins, bins])
+        self.observation_space = spaces.MultiDiscrete([int(self.time_interval), self.range, bins, 
+                                                       bins, bins, bins, bins, bins])
         self.action_space = spaces.Discrete(self.range, start=self.min_price)
 
 
@@ -49,42 +49,9 @@ class AuctionEnv(gym.Env):
         else:
             self.trader_type = 'Seller'
 
-
-    def calculate_reward(self, quote):
-        """
-        Calculate the reward based on the limit order book (lob), order, and quote.
-
-        Parameters:
-        lob (dict): The limit order book dictionary.
-        order (float): The order value.
-        quote (float): The quote value.
-
-        Returns:
-        float: The calculated reward.
-        """
-        reward = 0
-
-        for time, data in self.lob.items():
-            if self.trader_type == 'Buyer':
-                # Go through the asks in the lob and see if it matches with the quote
-                for ask in data['Asks']:
-                    price = ask[0]
-                    if quote > price:
-                        reward = self.order - price
-                        break  # Exit loop once a match is found
-            else:
-                # Go through the bids in the lob and see if it matches with the quote
-                for bid in data['Bids']:
-                    price = bid[0]
-                    if quote < price:
-                        reward = quote - self.order
-                        break  # Exit loop once a match is found
-
-        return reward
-
     
     def _get_obs(self):
-        return np.array([self.time, self.order, self.best_bid, self.best_ask, self.worst_bid, self.worst_ask])
+        return np.array([self.time, self.order, self.best_bid, self.best_ask, self.worst_bid, self.worst_ask, self.avg_bid, self.avg_ask])
 
 
     def set_additional_params(self, lob):
@@ -126,31 +93,28 @@ class AuctionEnv(gym.Env):
         self.set_additional_params(self.lob)
         
         # We have a new customer order
-        if self.trader.orders[0][0] != self.order:
+        if self.trader.orders[0].price != self.order:
             terminated = True
             # Check if there was a trade
             if last_trade_time == self.time:
                 transaction_price = self.trader.blotter[-1]['price']
-                reward = self.trader.orders[0][0] - transaction_price
-
-            self.time += 1
-            self.order = self.trader.orders[0][0]                                                        # Update to new customer order
-            self.best_bid = self.bin_average(self.lob['bids']['best'])                         # Update best bid
-            self.best_ask = self.bin_average(self.lob['asks']['best'])                         # Update best ask
-            self.worst_bid = self.bin_average(self.lob['bids']['worst'])                       # Update worst bid
-            self.worst_ask = self.bin_average(self.lob['asks']['worst'])                       # Update worst ask
-            # self.avg_bid = self.calc_average_price(lob['bids']['lob'])                       # Calculate new average big
-            # self.avg_ask = self.calc_average_price(lob['asks']['lob'])                       # Calculate new average ask
-            observation = np.array([self.time, self.order, self.best_bid, 
-                                    self.best_ask, self.worst_bid, self.worst_ask])
+                reward = self.order - transaction_price
+            self.order = self.trader.orders[0].price       # Update to new customer order
 
         else:
-            # Don't update bid and ask metrics
             self.time += 1
             terminated = False
             reward = 0.0
-            observation = np.array([self.time, self.order, self.best_bid, 
-                                    self.best_ask, self.worst_bid, self.worst_ask])
+
+        self.best_bid = self.bin_average(self.lob['bids']['best'])                             # Update best bid
+        self.best_ask = self.bin_average(self.lob['asks']['best'])                             # Update best ask
+        self.worst_bid = self.bin_average(self.lob['bids']['worst'])                           # Update worst bid
+        self.worst_ask = self.bin_average(self.lob['asks']['worst'])                           # Update worst ask
+        self.avg_bid = self.bin_average(self.calc_average_price(self.lob['bids']['lob']))      # Calculate new average big
+        self.avg_ask = self.bin_average(self.calc_average_price(self.lob['asks']['lob']))      # Calculate new average ask
+        observation = np.array([self.time, self.order, self.best_bid, 
+                                self.best_ask, self.worst_bid, self.worst_ask,
+                                self.avg_bid, self.avg_ask])
         
         truncated = False
         info = {}
@@ -169,15 +133,16 @@ class AuctionEnv(gym.Env):
             observation = np.zeros(6)
             return observation, info
         
-        self.order = self.trader.orders[0][0]                                                 # Update to new customer order
-        self.best_bid = self.bin_average(self.lob['bids']['best'])                         # Update best bid
-        self.best_ask = self.bin_average(self.lob['asks']['best'])                         # Update best ask
-        self.worst_bid = self.bin_average(self.lob['bids']['worst'])                       # Update worst bid
-        self.worst_ask = self.bin_average(self.lob['asks']['worst'])                       # Update worst ask
-        # self.avg_bid = self.calc_average_price(lob['bids']['lob'])                       # Calculate new average big
-        # self.avg_ask = self.calc_average_price(lob['asks']['lob'])                       # Calculate new average ask
+        self.order = self.trader.orders[0][0]                                                  # Update to new customer order
+        self.best_bid = self.bin_average(self.lob['bids']['best'])                             # Update best bid
+        self.best_ask = self.bin_average(self.lob['asks']['best'])                             # Update best ask
+        self.worst_bid = self.bin_average(self.lob['bids']['worst'])                           # Update worst bid
+        self.worst_ask = self.bin_average(self.lob['asks']['worst'])                           # Update worst ask
+        self.avg_bid = self.bin_average(self.calc_average_price(self.lob['bids']['lob']))      # Calculate new average big
+        self.avg_ask = self.bin_average(self.calc_average_price(self.lob['asks']['lob']))      # Calculate new average ask
         observation = np.array([self.time, self.order, self.best_bid, 
-                                self.best_ask, self.worst_bid, self.worst_ask])
+                                self.best_ask, self.worst_bid, self.worst_ask,
+                                self.avg_bid, self.avg_ask])
         self.trader.set_obs(observation)
 
         return observation, info
