@@ -61,12 +61,70 @@ from gymnasium import Space
 from gymnasium import spaces
 from collections import defaultdict
 from tqdm import tqdm
+import numpy as np
+
 
 # a bunch of system constants (globals)
 bse_sys_minprice = 1                    # minimum price in the system, in cents/pennies
 bse_sys_maxprice = 500                  # maximum price in the system, in cents/pennies
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
+
+def calc_average_price(list):
+        # Calculate the total price contribution and total quantity
+        total_price = sum(price * quantity for price, quantity in list)
+        total_quantity = sum(quantity for price, quantity in list)
+        
+        # Calculate the weighted average price
+        weighted_average_price = total_price / total_quantity if total_quantity else 0
+        
+        return weighted_average_price   
+
+
+def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=10):
+    """
+    Given a value, calculates the bin it would fall into
+    and returns the average of that bin.
+
+    :param value (int): The value that is to be mapped to a bin.
+    :param min_price (int): The minimum value allowed.
+    :param max_price (int): The maximum value allowed.
+    :param bins (int): The total number of bins.
+    """
+    if value is None:
+        value = 0.0
+
+    # Calculate bin width
+    bin_width = (max_price - min_price) / bins
+
+    # Determine the bin index for the value
+    bin_index = int((value - min_price) / bin_width)
+
+    # Ensure the value is placed in the last bin if it falls on max_price
+    if bin_index == bins:
+        bin_index -= 1
+
+    # Calculate the average of the bin range
+    bin_start = min_price + bin_index * bin_width
+    bin_end = bin_start + bin_width
+    bin_average = (bin_start + bin_end) / 2
+
+    return int(bin_average)
+
+
+def get_discrete_state(lob, time, order):
+    best_bid = bin_average(lob['bids']['best'])
+    best_ask = bin_average(lob['asks']['best'])
+    worst_bid = bin_average(lob['bids']['worst'])
+    worst_ask = bin_average(lob['asks']['worst'])
+    avg_bid = bin_average(calc_average_price(lob['bids']['lob']))
+    avg_ask = bin_average(calc_average_price(lob['asks']['lob']))
+
+    observation = np.array([int(time), order, best_bid, 
+                            best_ask, worst_bid, worst_ask,
+                            avg_bid, avg_ask])
+    
+    return observation
 
 
 # an Order/quote has a trader id, a type (buy/sell) price, quantity, timestamp, and unique i.d.
@@ -1809,17 +1867,16 @@ class Trader_ZIP(Trader):
 class RLAgent(Trader):
     def __init__(self, ttype, tid, balance, params, time, 
                  action_space: spaces.Space, obs_space: spaces.Space, 
-                 q_table: DefaultDict = defaultdict(lambda: 0), 
-                 gamma=1.0, epsilon=0.1):
+                 gamma=1.0, epsilon=0.7):
         
         super().__init__(ttype, tid, balance, params, time)
         self.action_space = action_space
         self.obs_space = obs_space
         self.gamma: float = gamma
         self.epsilon: float = epsilon
-
+        
         self.num_actions = spaces.flatdim(action_space)
-        self.q_table: DefaultDict = q_table
+        self.q_table: DefaultDict = defaultdict(lambda: 0)
         self.sa_counts = {}
         self.current_obs = None
 
@@ -1838,14 +1895,60 @@ class RLAgent(Trader):
         # obs = tuple(obs)
         if random.uniform(0, 1) < self.epsilon:
             # Explore - sample a random action
-            return self.action_space.sample()
-        
+            action = bse_sys_minprice + self.action_space.sample()
         else:
             # Exploit - choose the action with the highest probability
-            return max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+            action = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+
+        # # Check if it is a bad bid
+        # if action > self.orders[0].price:
+        #     return self.orders[0].price
+        # Otherwise return sampled action
+        return action
+
+    # @classmethod
+    def load_q_table(self, file_path: str) -> DefaultDict:
+        q_table = defaultdict(lambda: 0)
+        try:
+            with open(file_path, 'r', newline='') as f:
+                reader = csv.reader(f)
+                next(reader)  # Skip the header
+                for row in reader:
+                    state, action, q_value = row
+                    q_table[(state, int(action))] = float(q_value)
+        except FileNotFoundError:
+            pass  # If the file does not exist, return an empty q_table
+        return q_table
+    
+
+    def dump_action_values(self, q_table: DefaultDict, file_path: str):
+        """
+        Save the Q-table to a CSV file.
+
+        :param q_table (DefaultDict): The Q-table to save.
+        :param file_path (str): The path to the file where the Q-table will be saved.
+        """
+        # Load the existing Q-table from the file
+        existing_q_table = self.load_q_table(file_path)
+
+        # Update existing Q-table with new entries
+        for (state, action), q_value in q_table.items():
+            existing_q_table[(state, action)] = q_value
+
+        # Write the updated Q-table back to the file
+        with open(file_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['State', 'Action', 'Q-Value'])  # Write the header
+            for (state, action), q_value in existing_q_table.items():
+                writer.writerow([state, action, q_value])
+                # state_str = ','.join(map(str, state))  # Convert state tuple to string
+                # writer.writerow([f'({state_str})', action, q_value])
 
 
     def learn(self) -> Dict:
+        # Load the current q_table from the CSV file
+        self.q_table = self.load_q_table('q_table.csv')
+
         traj_length = len(self.rew_list)
         G = 0
         state_action_list = list(zip(self.obs_list, self.act_list))
@@ -1863,38 +1966,35 @@ class RLAgent(Trader):
                 ) / self.sa_counts.get(state_action_pair, 0)
                 
                 # updated_values[state_action_pair] = self.q_table[state_action_pair]
+
+        # Save the updated q_table back to the CSV file
+        self.dump_action_values(self.q_table, 'q_table.csv')
       
         return self.q_table
 
-
-    def dump_action_values(self, q_table: DefaultDict, file_path: str):
-        """
-        Save the Q-table to a CSV file.
-
-        :param q_table (DefaultDict): The Q-table to save.
-        :param file_path (str): The path to the file where the Q-table will be saved.
-        """
-        with open(file_path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['State', 'Action', 'Q-Value'])     # Write the header
-            
-            # Write the Q-table entries
-            for (state, action), q_value in q_table.items():
-                writer.writerow([state, action, q_value])
-
     
     def getorder(self, time, countdown, lob):     
-        if countdown < 10.0:
-            self.dump_action_values(self.q_table, 'q_table.csv')
+        # if countdown < 10.0:
+        #     self.dump_action_values(self.q_table, 'q_table.csv')
 
         if len(self.orders) < 1:
             order = None
 
         else:
             order_type = self.orders[0].otype
-            # return the best action following a greedy policy
+            # return the best action following an epsilon-greedy policy
             obs = self.current_obs
-            quote = max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+            if random.uniform(0, 1) < self.epsilon:
+                # Explore - sample a random action
+                quote = bse_sys_minprice + self.action_space.sample()
+            else:
+                # Exploit - choose the action with the highest probability
+                quote = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+
+            # Check if it's a bad bid
+            if quote > self.orders[0].price:
+                quote = self.orders[0].price
+
             order = Order(self.tid, order_type, quote, self.orders[0].qty, time, lob['QID'])
 
         return order
@@ -1903,18 +2003,18 @@ class RLAgent(Trader):
     def respond(self, time, lob, trade, verbose):
         self.profitpertime = self.profitpertime_update(time, self.birthtime, self.balance)
         
-        # Collect data
-        self.obs_list.append(self.current_obs)
-        self.act_list.append(self.act(self.current_obs))
-        self.rew_list.append(trade['price'] if trade else 0)
+        # # Collect data
+        # self.obs_list.append(self.current_obs)
+        # self.act_list.append(self.act(self.current_obs))
+        # self.rew_list.append(trade['price'] if trade else 0)
         
-        if trade:
-            self.learn()
-            self.obs_list = []
-            self.act_list = []
-            self.rew_list = []
+        # if trade:
+        #     self.learn()
+        #     self.obs_list = []
+        #     self.act_list = []
+        #     self.rew_list = []
         
-        # return updated_values
+        # return q_table
         return None
 
 
@@ -1975,6 +2075,9 @@ def trade_stats(expid, traders, dumpfile, time, lob):
 def populate_market(traders_spec, traders, shuffle, verbose):
     # traders_spec is a list of buyer-specs and a list of seller-specs
     # each spec is (<trader type>, <number of this type of trader>, optionally: <params for this type of trader>)
+    
+    # # Load the Q-table from the CSV file
+    # q_table = RLAgent.load_q_table(q_table_file)
 
     def trader_type(robottype, name, parameters):
         balance = 0.00
@@ -1998,7 +2101,9 @@ def populate_market(traders_spec, traders, shuffle, verbose):
         elif robottype == 'PRDE':
             return Trader_PRZI('PRDE', name, balance, parameters, time0)
         elif robottype == 'RL':
-            return RLAgent('RL', name, balance, parameters, time0, action_space=spaces.Discrete(100), obs_space=spaces.MultiDiscrete([24, 100, 5, 5, 5, 5, 5, 5]))
+            return RLAgent('RL', name, balance, parameters, time0, 
+                           action_space=spaces.Discrete(bse_sys_maxprice - bse_sys_minprice + 1), 
+                           obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 
@@ -2393,9 +2498,21 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     # initialise the exchange
     exchange = Exchange()
 
+    q_table_file = 'q_table.csv'
+
     # create a bunch of traders
     traders = {}
     trader_stats = populate_market(trader_spec, traders, True, populate_verbose)
+
+    # Find the tid of the RL agent
+    rl_trader_tid = None
+    for tid, trader in traders.items():
+        if trader.ttype == 'RL':
+            rl_trader_tid = tid
+            break
+
+    if rl_trader_tid is None:
+        raise ValueError("RL agent not found in the traders")
 
     # timestep set so that can process all traders in one second
     # NB minimum interarrival time of customer orders may be much less than this!!
@@ -2415,8 +2532,15 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     # frames_done is record of what frames we have printed data for thus far
     frames_done = set()
 
-    while time < endtime:
+    num_observations = int(endtime - starttime)
+    obs_list = []
+    action_list = np.zeros(num_observations)
+    reward_list = np.zeros(num_observations)
 
+    interval = duration / num_observations
+    next_observation_time = starttime
+
+    while time < endtime:
         # how much time left, as a percentage?
         time_left = (endtime - time) / duration
 
@@ -2441,8 +2565,19 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
         order = traders[tid].getorder(time, time_left, exchange.publish_lob(time, lobframes, lob_verbose))
 
         # if verbose: print('Trader Quote: %s' % (order))
+        if traders[rl_trader_tid].orders == []:
+            order_price = 0
+        else:
+            order_price =  traders[rl_trader_tid].orders[0].price
+
+        if time >= next_observation_time and len(obs_list) < num_observations:
+            obs_list.append(get_discrete_state(exchange.publish_lob(time, lobframes, lob_verbose), time, order_price))
+            next_observation_time += interval
 
         if order is not None:
+            if tid == rl_trader_tid:
+                action_list[int(time - starttime)] = order.price
+
             if order.otype == 'Ask' and order.price < traders[tid].orders[0].price:
                 sys.exit('Bad ask')
             if order.otype == 'Bid' and order.price > traders[tid].orders[0].price:
@@ -2451,6 +2586,12 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
             traders[tid].n_quotes = 1
             trade = exchange.process_order2(time, order, process_verbose)
             if trade is not None:
+                # Check if the RL agent was involved in the trade, in which case
+                # make sure the agent gets the appropriate reward
+                if trade['party1'] == rl_trader_tid or trade['party2'] == rl_trader_tid:
+                    reward = traders[rl_trader_tid].orders[0].price - trade['price']
+                    reward_list[int(time-starttime)] = reward
+
                 # trade occurred,
                 # so the counterparties update order lists and blotters
                 traders[trade['party1']].bookkeep(trade, order, bookkeep_verbose, time)
@@ -2461,6 +2602,7 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
             # traders respond to whatever happened
             lob = exchange.publish_lob(time, lobframes, lob_verbose)
             any_record_frame = False
+
             for t in traders:
                 # NB respond just updates trader's internal variables
                 # doesn't alter the LOB, so processing each trader in
@@ -2475,11 +2617,11 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
                 dump_strats_frame(time, strat_dump, traders)
                 # record that we've written this frame
                 frames_done.add(int(time))
-
+        
         time = time + timestep
 
     # session has ended
-    print(exchange.publish_lob(time, lobframes, lob_verbose))
+    # print(exchange.publish_lob(time, lobframes, lob_verbose))
 
     # write trade_stats for this session (NB could use this to write end-of-session summary only)
     if dump_flags['dump_avgbals']:
@@ -2500,6 +2642,9 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     if dump_flags['dump_lobs']:
         lobframes.close()
 
+    return obs_list, action_list, reward_list
+
+
 #############################
 
 # # Below here is where we set up and run a whole series of experiments
@@ -2512,7 +2657,7 @@ if __name__ == "__main__":
     n_days = 10
     start_time = 0.0
     # end_time = 60.0 * 60.0 * 24 * n_days
-    end_time = 120.0
+    end_time = 100.0
     duration = end_time - start_time
 
     # schedule_offsetfn returns time-dependent offset, to be added to schedule prices
@@ -2571,7 +2716,7 @@ if __name__ == "__main__":
     n_trials = 1
 
     # n_recorded is how many trials (i.e. market sessions) to write full data-files for
-    n_trials_recorded = 5
+    n_trials_recorded = 1
 
     trial = 1
 
@@ -2588,15 +2733,15 @@ if __name__ == "__main__":
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
-        if trial > n_trials_recorded:
+        if trial < n_trials_recorded:
             dump_flags = {'dump_blotters': False, 'dump_lobs': False, 'dump_strats': False,
                           'dump_avgbals': False, 'dump_tape': False}
         else:
             dump_flags = {'dump_blotters': True, 'dump_lobs': True, 'dump_strats': True,
                           'dump_avgbals': True, 'dump_tape': True}
 
-        market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose)
-
+        state, action, reward = market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose)
+        # print(f"Action = {action} \nReward = {reward}")
         trial = trial + 1
 
     # run a sequence of trials that exhaustively varies the ratio of four trader types
