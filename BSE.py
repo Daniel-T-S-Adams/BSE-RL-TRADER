@@ -120,9 +120,9 @@ def get_discrete_state(lob, time, order):
     avg_bid = bin_average(calc_average_price(lob['bids']['lob']))
     avg_ask = bin_average(calc_average_price(lob['asks']['lob']))
 
-    observation = np.array([int(time), order, best_bid, 
-                            best_ask, worst_bid, worst_ask,
-                            avg_bid, avg_ask])
+    observation = np.array([float(int(time)), float(order), float(best_bid), 
+                            float(best_ask), float(worst_bid), float(worst_ask),
+                            float(avg_bid), float(avg_ask)])
     
     return observation
 
@@ -1867,16 +1867,26 @@ class Trader_ZIP(Trader):
 class RLAgent(Trader):
     def __init__(self, ttype, tid, balance, params, time, 
                  action_space: spaces.Space, obs_space: spaces.Space, 
-                 gamma=1.0, epsilon=0.7):
+                 q_table:DefaultDict=defaultdict(lambda: 0), 
+                 gamma=1.0, epsilon=0.9
+                 ):
         
         super().__init__(ttype, tid, balance, params, time)
+
         self.action_space = action_space
         self.obs_space = obs_space
         self.gamma: float = gamma
         self.epsilon: float = epsilon
+        self.q_table:DefaultDict = q_table
+
+        # Check if they gave different parameters
+        if type(params) is dict:
+            if 'q_table' in params:
+                self.q_table = params['q_table']
+            if 'epsilon' in params:
+                self.epsilon = params['epsilon']
         
         self.num_actions = spaces.flatdim(action_space)
-        self.q_table: DefaultDict = defaultdict(lambda: 0)
         self.sa_counts = {}
         self.current_obs = None
 
@@ -1906,7 +1916,7 @@ class RLAgent(Trader):
         # Otherwise return sampled action
         return action
 
-    # @classmethod
+    @classmethod
     def load_q_table(self, file_path: str) -> DefaultDict:
         q_table = defaultdict(lambda: 0)
         try:
@@ -1915,11 +1925,11 @@ class RLAgent(Trader):
                 next(reader)  # Skip the header
                 for row in reader:
                     state, action, q_value = row
-                    q_table[(state, int(action))] = float(q_value)
+                    q_table[(state, int(float(action)))] = float(q_value)
         except FileNotFoundError:
             pass  # If the file does not exist, return an empty q_table
         return q_table
-    
+
 
     def dump_action_values(self, q_table: DefaultDict, file_path: str):
         """
@@ -1947,12 +1957,11 @@ class RLAgent(Trader):
 
     def learn(self) -> Dict:
         # Load the current q_table from the CSV file
-        self.q_table = self.load_q_table('q_table.csv')
+        q_table = self.load_q_table('q_table.csv')
 
         traj_length = len(self.rew_list)
         G = 0
         state_action_list = list(zip(self.obs_list, self.act_list))
-        # updated_values = {}
         
         for t in range(traj_length - 1, -1, -1):
             state_action_pair = (self.obs_list[t], self.act_list[t])
@@ -1965,8 +1974,6 @@ class RLAgent(Trader):
                     G - self.q_table[state_action_pair]
                 ) / self.sa_counts.get(state_action_pair, 0)
                 
-                # updated_values[state_action_pair] = self.q_table[state_action_pair]
-
         # Save the updated q_table back to the CSV file
         self.dump_action_values(self.q_table, 'q_table.csv')
       
@@ -1976,7 +1983,6 @@ class RLAgent(Trader):
     def getorder(self, time, countdown, lob):     
         # if countdown < 10.0:
         #     self.dump_action_values(self.q_table, 'q_table.csv')
-
         if len(self.orders) < 1:
             order = None
 
@@ -2002,7 +2008,7 @@ class RLAgent(Trader):
 
     def respond(self, time, lob, trade, verbose):
         self.profitpertime = self.profitpertime_update(time, self.birthtime, self.balance)
-        
+
         # # Collect data
         # self.obs_list.append(self.current_obs)
         # self.act_list.append(self.act(self.current_obs))
@@ -2148,6 +2154,14 @@ def populate_market(traders_spec, traders, shuffle, verbose):
                 else:   # ttype=PRZI
                     parameters = {'optimizer': None, 'k': 1,
                                   'strat_min': trader_params['s_min'], 'strat_max': trader_params['s_max']}
+
+        if ttype == 'RL':
+            # parameters for RL agent
+            epsilon = trader_params.get('epsilon', 0.9)
+            parameters = {'epsilon': epsilon}
+            if 'q_table' in trader_params:
+                q_table = RLAgent.load_q_table(trader_params['q_table'])
+                parameters['q_table'] = q_table
 
         return parameters
 
@@ -2728,7 +2742,7 @@ if __name__ == "__main__":
         buyers_spec = [('ZIPSH', 10, {'k': 4})]
         sellers_spec = [('ZIPSH', 10, {'k': 4})]
 
-        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1)]
+        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table': 'q_table.csv', 'epsilon': 0.9})]
         sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
@@ -2741,7 +2755,7 @@ if __name__ == "__main__":
                           'dump_avgbals': True, 'dump_tape': True}
 
         state, action, reward = market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose)
-        # print(f"Action = {action} \nReward = {reward}")
+        # print(f"State = {state} \nAction = {action} \nReward = {reward}")
         trial = trial + 1
 
     # run a sequence of trials that exhaustively varies the ratio of four trader types
