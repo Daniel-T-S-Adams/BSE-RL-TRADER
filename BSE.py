@@ -2607,13 +2607,13 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     # frames_done is record of what frames we have printed data for thus far
     frames_done = set()
 
-    num_observations = int(endtime - starttime)
-    obs_list = []
-    action_list = np.zeros(num_observations)
-    reward_list = np.zeros(num_observations)
+    # num_observations = int(endtime - starttime)
+    # obs_list = []
+    # action_list = np.zeros(num_observations)
+    # reward_list = np.zeros(num_observations)
 
-    interval = duration / num_observations
-    next_observation_time = starttime
+    # interval = duration / num_observations
+    # next_observation_time = starttime
 
     while time < endtime:
         # how much time left, as a percentage?
@@ -2640,18 +2640,8 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
         order = traders[tid].getorder(time, time_left, exchange.publish_lob(time, lobframes, lob_verbose))
 
         # if verbose: print('Trader Quote: %s' % (order))
-        if traders[rl_trader_tid].orders == []:
-            order_price = 0
-        else:
-            order_price =  traders[rl_trader_tid].orders[0].price
-
-        if time >= next_observation_time and len(obs_list) < num_observations:
-            obs_list.append(get_discrete_state(exchange.publish_lob(time, lobframes, lob_verbose), time, order_price))
-            next_observation_time += interval
 
         if order is not None:
-            if tid == rl_trader_tid:
-                action_list[int(time - starttime)] = order.price
 
             if order.otype == 'Ask' and order.price < traders[tid].orders[0].price:
                 sys.exit('Bad ask')
@@ -2661,12 +2651,6 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
             traders[tid].n_quotes = 1
             trade = exchange.process_order2(time, order, process_verbose)
             if trade is not None:
-                # Check if the RL agent was involved in the trade, in which case
-                # make sure the agent gets the appropriate reward
-                if trade['party1'] == rl_trader_tid or trade['party2'] == rl_trader_tid:
-                    reward = traders[rl_trader_tid].orders[0].price - trade['price']
-                    reward_list[int(time-starttime)] = reward
-
                 # trade occurred,
                 # so the counterparties update order lists and blotters
                 traders[trade['party1']].bookkeep(trade, order, bookkeep_verbose, time)
@@ -2716,8 +2700,6 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
 
     if dump_flags['dump_lobs']:
         lobframes.close()
-
-    return obs_list, action_list, reward_list
 
 
 #############################
@@ -2815,8 +2797,8 @@ if __name__ == "__main__":
             dump_flags = {'dump_blotters': True, 'dump_lobs': True, 'dump_strats': True,
                           'dump_avgbals': True, 'dump_tape': True}
 
-        state, action, reward = market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose)
-        # print(f"State = {state} \nAction = {action} \nReward = {reward}")
+        market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose)
+        
         trial = trial + 1
 
     # run a sequence of trials that exhaustively varies the ratio of four trader types

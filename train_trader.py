@@ -94,8 +94,27 @@ def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict) -> float
 def train(episodes: int, market_params: tuple, eval_freq: int) -> DefaultDict:
     for episode in range(1, episodes + 1):
         # Run one market session to get observations, actions, and rewards
-        obs_list, action_list, reward_list = market_session(*market_params)
+        market_session(*market_params)
 
+        file = 'episode.csv'
+        obs_list = []
+        action_list = []
+        reward_list = []
+
+        # Read the episode.csv file
+        with open(file, 'r') as f:
+            reader = csv.reader(f)
+            next(reader)  # Skip the header
+            for row in reader:
+                obs = np.fromstring(row[0].strip('[]'), sep=' ')
+                action = int(float(row[1]))
+                reward = float(row[2])
+
+                obs_list.append(obs)
+                action_list.append(action)
+                reward_list.append(reward)
+
+        print(reward)
         # Learn from the experience
         q_table = learn(obs_list, action_list, reward_list)
         
@@ -113,7 +132,7 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 100.0
 
-buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {})]
+buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table': 'q_table.csv'})]
 sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
