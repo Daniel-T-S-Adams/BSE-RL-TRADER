@@ -1889,11 +1889,17 @@ class RLAgent(Trader):
         self.num_actions = spaces.flatdim(action_space)
         self.sa_counts = {}
         self.current_obs = None
+        self.old_balance = 0
 
-        # Trajectory storage
-        self.obs_list = []
-        self.act_list = []
-        self.rew_list = []
+        # Initialize episode.csv
+        with open('episode.csv', 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['Observation', 'Action', 'Reward'])
+
+        # # Trajectory storage
+        # self.obs_list = []
+        # self.act_list = []
+        # self.rew_list = []
 
     
     def set_obs(self, obs):
@@ -1979,10 +1985,36 @@ class RLAgent(Trader):
       
         return self.q_table
 
+
+    def q_learn(
+        self, obs: int, action: int, reward: float, n_obs: int, done: bool
+    ) -> float:
+        """Implements the Q-Learning method and updates 
+        the Q-table based on agent experience.
+
+        :param obs (int): received observation representing the current environmental state
+        :param action (int): index of applied action
+        :param reward (float): received reward
+        :param n_obs (int): received observation representing the next environmental state
+        :param done (bool): flag indicating whether a terminal state has been reached
+        :return (float): updated Q-value for current observation-action pair
+        """
+        # Best action for the next state
+        a_ = np.argmax([self.q_table[(n_obs, a)] for a in range(self.num_actions)])
+
+        # Update Q-value using Q-learning update rule
+        self.q_table[(obs, action)] += (
+            self.alpha * (reward + self.gamma * self.q_table[(n_obs, a_)] * (1 - done) - self.q_table[(obs, action)])
+            )
+
+        obs = n_obs
+
+        return self.q_table[(obs, action)]
+
     
     def getorder(self, time, countdown, lob):     
-        # if countdown < 10.0:
-        #     self.dump_action_values(self.q_table, 'q_table.csv')
+        # self.countdown = countdown
+
         if len(self.orders) < 1:
             order = None
 
@@ -2003,17 +2035,46 @@ class RLAgent(Trader):
 
             order = Order(self.tid, order_type, quote, self.orders[0].qty, time, lob['QID'])
 
+            # Write the current state, action and reward
+            obs = get_discrete_state(lob, time, self.orders[0].price)
+            action = quote
+            reward = 0.0
+            with open('episode.csv', 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([obs, action, reward])
+
         return order
     
 
     def respond(self, time, lob, trade, verbose):
         self.profitpertime = self.profitpertime_update(time, self.birthtime, self.balance)
 
+        if trade is not None:
+            # Check if the RL trader was involved in the trade
+            if trade['party1'] == self.tid or trade['party2'] == self.tid:
+                # reward = self.orders[0].price - trade['price']
+                reward = self.balance - self.old_balance
+                # Read the contents of episode.csv
+                with open('episode.csv', 'r') as f:
+                    lines = f.readlines()
+
+                # Modify the last entry with the new reward
+                if len(lines) > 1:  # Ensure there's at least one entry besides the header
+                    last_entry = lines[-1].strip().split(',')
+                    last_entry[-1] = str(reward)
+                    lines[-1] = ','.join(last_entry) + '\n'
+
+                # Write the updated contents back to episode.csv
+                with open('episode.csv', 'w', newline='') as f:
+                    f.writelines(lines)
+
+                self.old_balance = self.balance
+    
         # # Collect data
-        # self.obs_list.append(self.current_obs)
-        # self.act_list.append(self.act(self.current_obs))
-        # self.rew_list.append(trade['price'] if trade else 0)
-        
+        # self.obs_list.append(obs)
+        # self.act_list.append(action)
+        # self.rew_list.append(reward)
+
         # if trade:
         #     self.learn()
         #     self.obs_list = []
@@ -2631,7 +2692,7 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
                 dump_strats_frame(time, strat_dump, traders)
                 # record that we've written this frame
                 frames_done.add(int(time))
-        
+
         time = time + timestep
 
     # session has ended
@@ -2671,7 +2732,7 @@ if __name__ == "__main__":
     n_days = 10
     start_time = 0.0
     # end_time = 60.0 * 60.0 * 24 * n_days
-    end_time = 100.0
+    end_time = 500.0
     duration = end_time - start_time
 
     # schedule_offsetfn returns time-dependent offset, to be added to schedule prices
