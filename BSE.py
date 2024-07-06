@@ -1879,6 +1879,13 @@ class RLAgent(Trader):
         self.epsilon: float = epsilon
         self.q_table:DefaultDict = q_table
 
+        if self.tid[:1] == 'B':
+            self.type = 'Buyer'
+        elif self.tid[:1] == 'S':
+            self.type = 'Seller'
+        else:
+            raise ValueError("Trader should be a buyer or seller")
+
         # Check if they gave different parameters
         if type(params) is dict:
             if 'q_table' in params:
@@ -2021,8 +2028,7 @@ class RLAgent(Trader):
 
     
     def getorder(self, time, countdown, lob):     
-        # self.countdown = countdown
-
+        
         if len(self.orders) < 1:
             order = None
 
@@ -2030,15 +2036,25 @@ class RLAgent(Trader):
             order_type = self.orders[0].otype
             # return the best action following an epsilon-greedy policy
             obs = self.current_obs
+            # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
-                # Explore - sample a random action
-                quote = bse_sys_minprice + self.action_space.sample()
+                if self.type is 'Buyer':
+                    quote = bse_sys_minprice + self.action_space.sample()
+                elif self.type is 'Seller':
+                    quote = bse_sys_maxprice - self.action_space.sample()
+            # Exploit - choose the action with the highest probability
             else:
-                # Exploit - choose the action with the highest probability
-                quote = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+                if self.type is 'Buyer':
+                    quote = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+                elif self.type is 'Seller':
+                    quote = bse_sys_maxprice - max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
 
             # Check if it's a bad bid
-            if quote > self.orders[0].price:
+            if self.type is 'Buyer' and quote > self.orders[0].price:
+                quote = self.orders[0].price
+            
+            # Check if it's a bad ask
+            elif self.type is 'Seller' and quote < self.orders[0].price:
                 quote = self.orders[0].price
 
             order = Order(self.tid, order_type, quote, self.orders[0].qty, time, lob['QID'])
@@ -2060,7 +2076,6 @@ class RLAgent(Trader):
         if trade is not None:
             # Check if the RL trader was involved in the trade
             if trade['party1'] == self.tid or trade['party2'] == self.tid:
-                # reward = self.orders[0].price - trade['price']
                 reward = self.balance - self.old_balance
                 # Read the contents of episode.csv
                 with open('episode.csv', 'r') as f:
