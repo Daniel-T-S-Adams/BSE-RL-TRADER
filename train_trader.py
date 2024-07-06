@@ -80,11 +80,21 @@ def learn(obs: List[int], actions: List[int], rewards: List[float]) -> Dict:
 
 def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict) -> float:
     total_return = 0.0
+    balance = 0.0
     
     for _ in range(episodes):
-        obs_list, action_list, reward_list = market_session(*market_params)
-        # Compute total return for the current evaluation episode
-        total_return += sum(reward_list)
+        market_session(*market_params)
+
+        # Read the episode.csv file
+        with open('episode.csv', 'r') as f:
+            reader = csv.reader(f)
+            next(reader)  # Skip the header
+            for row in reader:
+                reward = float(row[2])
+                balance += reward
+
+        # Profit made by the RL agent at the end of the trading window
+        total_return += balance
     
     mean_return = total_return / episodes
     return mean_return
@@ -114,25 +124,32 @@ def train(episodes: int, market_params: tuple, eval_freq: int) -> DefaultDict:
                 action_list.append(action)
                 reward_list.append(reward)
 
-        print(reward)
         # Learn from the experience
         q_table = learn(obs_list, action_list, reward_list)
-        
+            
         # Perform evaluation every `eval_freq` episodes
         if episode % eval_freq == 0:
             print(f"Training Episode {episode}/{episodes}")
-            mean_return = evaluate(episodes=100, market_params=market_params, q_table=q_table)
+            mean_return = evaluate(episodes=CONFIG['eval_episodes'], market_params=market_params, q_table=q_table)
             tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN {mean_return}")
 
     return q_table
 
+
+CONFIG = {
+    "total_eps": 1000,
+    "eval_freq": 100,
+    "eval_episodes": 100,
+    "gamma": 1.0,
+    "epsilon": 0.9,
+}
 
 # Define market parameters
 sess_id = 'session_1'
 start_time = 0.0
 end_time = 100.0
 
-buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table': 'q_table.csv'})]
+buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table': 'q_table.csv', 'epsilon': CONFIG['epsilon']})]
 sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
@@ -153,5 +170,7 @@ dump_flags = {'dump_strats': False, 'dump_lobs': False, 'dump_avgbals': False, '
 verbose = False
 
 
-# Training the RL agent with evaluation every 10 episodes
-q_table = train(episodes=100, market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), eval_freq=10)
+# Training the RL agent with evaluation
+q_table = train(episodes=CONFIG['total_eps'], 
+                market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
+                eval_freq=CONFIG['eval_freq'])
