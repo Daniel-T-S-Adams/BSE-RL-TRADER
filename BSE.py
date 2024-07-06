@@ -1896,14 +1896,22 @@ class RLAgent(Trader):
             writer = csv.writer(f)
             writer.writerow(['Observation', 'Action', 'Reward'])
 
-        # # Trajectory storage
-        # self.obs_list = []
-        # self.act_list = []
-        # self.rew_list = []
-
     
     def set_obs(self, obs):
         self.current_obs = obs
+
+
+    def epsilon_decay(self, strat, eps_start=1.0, eps_min=0.05, eps_decay=0.99):
+        self.epsilon = eps_start
+
+        if strat == 'constant':
+            self.epsilon = 0.9
+
+        if strat == 'linear':
+            self.epsilon = max(eps_min, self.epsilon - eps_decay)
+
+        if strat == 'exponential':
+            self.epsilon = max(eps_min, eps_decay*self.epsilon)
 
         
     # implement epsilon-greedy action selection
@@ -2042,7 +2050,7 @@ class RLAgent(Trader):
             with open('episode.csv', 'a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([obs, action, reward])
-
+        
         return order
     
 
@@ -2069,17 +2077,6 @@ class RLAgent(Trader):
                     f.writelines(lines)
 
                 self.old_balance = self.balance
-    
-        # # Collect data
-        # self.obs_list.append(obs)
-        # self.act_list.append(action)
-        # self.rew_list.append(reward)
-
-        # if trade:
-        #     self.learn()
-        #     self.obs_list = []
-        #     self.act_list = []
-        #     self.rew_list = []
         
         # return q_table
         return None

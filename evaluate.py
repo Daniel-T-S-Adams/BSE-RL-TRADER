@@ -1,7 +1,7 @@
 import time
 import matplotlib.pyplot as plt
 import numpy as np
-
+import random
 
 def evaluate(env, agent, max_steps, eval_episodes):
     """
@@ -38,3 +38,4 @@ def evaluate(env, agent, max_steps, eval_episodes):
     negative_returns = sum([ret < 0 for ret in episodic_returns])
 
     return mean_return, negative_returns
+
