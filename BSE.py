@@ -1866,8 +1866,7 @@ class Trader_ZIP(Trader):
 
 class RLAgent(Trader):
     def __init__(self, ttype, tid, balance, params, time, 
-                 action_space: spaces.Space, obs_space: spaces.Space, 
-                 q_table:DefaultDict=defaultdict(lambda: 0), 
+                 action_space: spaces.Space, obs_space: spaces.Space,  
                  gamma=1.0, epsilon=0.9
                  ):
         
@@ -1877,7 +1876,9 @@ class RLAgent(Trader):
         self.obs_space = obs_space
         self.gamma: float = gamma
         self.epsilon: float = epsilon
-        self.q_table:DefaultDict = q_table
+        self.q_table:DefaultDict = defaultdict(lambda: 0)
+        # self.q_table_buyer:DefaultDict = defaultdict(lambda: 0)
+        # self.q_table_seller:DefaultDict = defaultdict(lambda: 0)
 
         if self.tid[:1] == 'B':
             self.type = 'Buyer'
@@ -1885,11 +1886,13 @@ class RLAgent(Trader):
             self.type = 'Seller'
         else:
             raise ValueError("Trader should be a buyer or seller")
-
+        
         # Check if they gave different parameters
         if type(params) is dict:
-            if 'q_table' in params:
-                self.q_table = params['q_table']
+            if 'q_table_buyer' in params and self.type == 'Buyer':
+                self.q_table = params['q_table_buyer']
+            elif 'q_table_seller' in params and self.type == 'Seller':
+                self.q_table = params['q_table_seller']
             if 'epsilon' in params:
                 self.epsilon = params['epsilon']
         
@@ -2038,23 +2041,23 @@ class RLAgent(Trader):
             obs = self.current_obs
             # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
-                if self.type is 'Buyer':
+                if self.type == 'Buyer':
                     quote = bse_sys_minprice + self.action_space.sample()
-                elif self.type is 'Seller':
+                elif self.type == 'Seller':
                     quote = bse_sys_maxprice - self.action_space.sample()
             # Exploit - choose the action with the highest probability
             else:
-                if self.type is 'Buyer':
+                if self.type == 'Buyer':
                     quote = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
-                elif self.type is 'Seller':
+                elif self.type == 'Seller':
                     quote = bse_sys_maxprice - max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
 
             # Check if it's a bad bid
-            if self.type is 'Buyer' and quote > self.orders[0].price:
+            if self.type == 'Buyer' and quote > self.orders[0].price:
                 quote = self.orders[0].price
             
             # Check if it's a bad ask
-            elif self.type is 'Seller' and quote < self.orders[0].price:
+            elif self.type == 'Seller' and quote < self.orders[0].price:
                 quote = self.orders[0].price
 
             order = Order(self.tid, order_type, quote, self.orders[0].qty, time, lob['QID'])
@@ -2232,9 +2235,12 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             # parameters for RL agent
             epsilon = trader_params.get('epsilon', 0.9)
             parameters = {'epsilon': epsilon}
-            if 'q_table' in trader_params:
-                q_table = RLAgent.load_q_table(trader_params['q_table'])
-                parameters['q_table'] = q_table
+            if 'q_table_buyer' in trader_params:
+                q_table_buyer = RLAgent.load_q_table(trader_params['q_table_buyer'])
+                parameters['q_table_buyer'] = q_table_buyer
+            elif 'q_table_seller' in trader_params:
+                q_table_seller = RLAgent.load_q_table(trader_params['q_table_seller'])
+                parameters['q_table_seller'] = q_table_seller
 
         return parameters
 
@@ -2688,7 +2694,7 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
                 dump_strats_frame(time, strat_dump, traders)
                 # record that we've written this frame
                 frames_done.add(int(time))
-
+        
         time = time + timestep
 
     # session has ended
@@ -2797,7 +2803,7 @@ if __name__ == "__main__":
         buyers_spec = [('ZIPSH', 10, {'k': 4})]
         sellers_spec = [('ZIPSH', 10, {'k': 4})]
 
-        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table': 'q_table.csv', 'epsilon': 0.9})]
+        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_buyer': 'q_table.csv', 'epsilon': 0.9})]
         sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
