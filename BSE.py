@@ -1901,8 +1901,13 @@ class RLAgent(Trader):
         self.current_obs = None
         self.old_balance = 0
 
-        # Initialize episode.csv
-        with open('episode.csv', 'w', newline='') as f:
+        # Initialize file to write obs, action, rewards
+        if self.type == 'Buyer':
+            file = 'episode_buyer.csv'
+        elif self.type == 'Seller':
+            file = 'episode_seller.csv'
+
+        with open(file, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(['Observation', 'Action', 'Reward'])
 
@@ -1955,7 +1960,7 @@ class RLAgent(Trader):
         return q_table
 
 
-    def dump_action_values(self, q_table: DefaultDict, file_path: str):
+    def dump_q_table(self, q_table: DefaultDict, file_path: str):
         """
         Save the Q-table to a CSV file.
 
@@ -1999,7 +2004,10 @@ class RLAgent(Trader):
                 ) / self.sa_counts.get(state_action_pair, 0)
                 
         # Save the updated q_table back to the CSV file
-        self.dump_action_values(self.q_table, 'q_table.csv')
+        if self.type == 'Buyer':
+            self.dump_q_table(self.q_table, 'q_table_buyer.csv')
+        elif self.type == 'Seller':
+            self.dump_q_table(self.q_table, 'q_table_seller.csv')
       
         return self.q_table
 
@@ -2062,11 +2070,16 @@ class RLAgent(Trader):
 
             order = Order(self.tid, order_type, quote, self.orders[0].qty, time, lob['QID'])
 
+            if self.type == 'Buyer':
+                file = 'episode_buyer.csv'
+            elif self.type == 'Seller':
+                file = 'episode_seller.csv'
+
             # Write the current state, action and reward
             obs = get_discrete_state(lob, time, self.orders[0].price)
             action = quote
             reward = 0.0
-            with open('episode.csv', 'a', newline='') as f:
+            with open(file, 'a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([obs, action, reward])
         
@@ -2076,12 +2089,17 @@ class RLAgent(Trader):
     def respond(self, time, lob, trade, verbose):
         self.profitpertime = self.profitpertime_update(time, self.birthtime, self.balance)
 
+        if self.type == 'Buyer':
+            file = 'episode_buyer.csv'
+        elif self.type == 'Seller':
+            file = 'episode_seller.csv'
+
         if trade is not None:
             # Check if the RL trader was involved in the trade
             if trade['party1'] == self.tid or trade['party2'] == self.tid:
                 reward = self.balance - self.old_balance
                 # Read the contents of episode.csv
-                with open('episode.csv', 'r') as f:
+                with open(file, 'r') as f:
                     lines = f.readlines()
 
                 # Modify the last entry with the new reward
@@ -2091,7 +2109,7 @@ class RLAgent(Trader):
                     lines[-1] = ','.join(last_entry) + '\n'
 
                 # Write the updated contents back to episode.csv
-                with open('episode.csv', 'w', newline='') as f:
+                with open(file, 'w', newline='') as f:
                     f.writelines(lines)
 
                 self.old_balance = self.balance
@@ -2803,8 +2821,8 @@ if __name__ == "__main__":
         buyers_spec = [('ZIPSH', 10, {'k': 4})]
         sellers_spec = [('ZIPSH', 10, {'k': 4})]
 
-        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_buyer': 'q_table.csv', 'epsilon': 0.9})]
-        sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
+        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': 0.9})]
+        sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': 0.9})]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
