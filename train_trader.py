@@ -7,45 +7,10 @@ from tqdm import tqdm
 import csv
 from matplotlib import pyplot as plt
 
+
 gamma = 1.0
 alpha = 1e-4
 
-def load_q_table(file_path: str) -> DefaultDict:
-    q_table = defaultdict(lambda: 0)
-    try:
-        with open(file_path, 'r', newline='') as f:
-            reader = csv.reader(f)
-            next(reader)  # Skip the header
-            for row in reader:
-                state, action, q_value = row
-                q_table[(state, int(float(action)))] = float(q_value)
-    except FileNotFoundError:
-        pass  # If the file does not exist, return an empty q_table
-    return q_table
-
-
-def dump_action_values(q_table: DefaultDict, file_path: str):
-    """
-    Save the Q-table to a CSV file, updating existing entries or adding new ones.
-
-    :param q_table (DefaultDict): The Q-table to save.
-    :param file_path (str): The path to the file where the Q-table will be saved.
-    """
-    # Load the existing Q-table from the file
-    existing_q_table = load_q_table(file_path)
-
-    # Update existing Q-table with new entries
-    for (state, action), q_value in q_table.items():
-        existing_q_table[(state, action)] = q_value
-
-    # Write the updated Q-table back to the file
-    with open(file_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['State', 'Action', 'Q-Value'])  # Write the header
-        for (state, action), q_value in existing_q_table.items():
-            writer.writerow([state, action, q_value])
-            # state_str = ','.join(map(str, state))  # Convert state tuple to string
-            # writer.writerow([f'({state_str})', action, q_value])
 
 def load_episode_data(file: str) -> Tuple[List, List, List]:
     obs_list, action_list, reward_list = [], [], []
@@ -61,14 +26,14 @@ def load_episode_data(file: str) -> Tuple[List, List, List]:
     return obs_list, action_list, reward_list
 
 
-def epsilon_decay(strat, eps_start=1.0, eps_min=0.05, eps_decay=0.01):
-    epsilon = eps_start
+def epsilon_decay(strat, epsilon, timestep, max_timestep, eps_start=1.0, eps_min=0.05, eps_decay=0.01):
 
     if strat == 'constant':
         epsilon = 0.9
 
     if strat == 'linear':
-        epsilon = max(eps_min, epsilon - eps_decay)
+        decay_steps = eps_decay * max_timestep
+        epsilon = max(eps_min, eps_start - (eps_start - eps_min) * min(1.0, timestep / decay_steps))
 
     if strat == 'exponential':
         epsilon = max(eps_min, eps_decay*epsilon)
@@ -103,7 +68,7 @@ def learn(obs: List[int], actions: List[int], rewards: List[float]) -> Dict:
             # updated_values[state_action_pair] = q_table[state_action_pair]
 
         # Save the updated q_table back to the CSV file
-    dump_action_values(q_table, 'q_table.csv')
+    dump_q_table(q_table, 'q_table.csv')
     
     return q_table
 
@@ -164,22 +129,20 @@ def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict) -> float
 
 # Should change epsilon to 0.0 here so the agent doesn't explore
 # but rather just tries to maximise rewards
-def train(episodes: int, market_params: tuple, eval_freq: int) -> DefaultDict:
+def train(episodes: int, market_params: tuple, eval_freq: int, epsilon) -> DefaultDict:
     for episode in range(1, episodes + 1):
-        # # Update epsilon
-        # epsilon = epsilon_decay('linear')
-        # 
+
+        market_session(*market_params)
+        
         # # Update market_params to include the current epsilon
         # updated_market_params = list(market_params)
-        # for trader_spec in updated_market_params[3]: 
-        #     if trader_spec['buyers'][4][0] is 'RL':
-        #         trader_spec['buyers'][4][2]['epsilon'] = epsilon
-
-        # Run one market session to get observations, actions, and rewards
-        market_session(*market_params)
+        # if updated_market_params[3]['buyers'][4][0] == 'RL':
+        #     updated_market_params[3]['buyers'][4][2]['epsilon'] = epsilon
+        
+        # epsilon = epsilon_decay('linear', epsilon, episode, CONFIG['total_eps'])
 
         # # Run one market session to get observations, actions, and rewards
-        # market_session(*market_params)
+        # market_session(*updated_market_params)
 
         file = 'episode.csv'
         obs_list, action_list, reward_list = load_episode_data(file)
@@ -197,11 +160,11 @@ def train(episodes: int, market_params: tuple, eval_freq: int) -> DefaultDict:
 
 
 CONFIG = {
-    "total_eps": 1000,
+    "total_eps": 10,
     "eval_freq": 100,
     "eval_episodes": 100,
     "gamma": 1.0,
-    "epsilon": 0.9,
+    "epsilon": 1.0,
 }
 
 # Define market parameters
@@ -233,5 +196,9 @@ verbose = False
 # Training the RL agent with evaluation
 q_table = train(episodes=CONFIG['total_eps'], 
                 market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
-                eval_freq=CONFIG['eval_freq'])
+                eval_freq=CONFIG['eval_freq'],
+                epsilon=CONFIG['epsilon'])
+
+
+
 

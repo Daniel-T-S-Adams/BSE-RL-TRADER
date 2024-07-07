@@ -1,10 +1,8 @@
-import numpy as np 
-import random
 from typing import List, Dict, DefaultDict, Tuple
 from collections import defaultdict
-from tqdm import tqdm
 import csv
 from matplotlib import pyplot as plt
+
 
 def load_q_table(file_path: str) -> DefaultDict:
     """
