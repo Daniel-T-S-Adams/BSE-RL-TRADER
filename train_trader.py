@@ -6,55 +6,12 @@ from BSE import market_session
 from matplotlib import pyplot as plt
 from collections import defaultdict
 from typing import List, Dict, DefaultDict, Tuple
+from q_table_data import load_q_table, dump_q_table
 
 
 gamma = 1.0
 alpha = 1e-4
 
-
-def load_q_table(file_path: str) -> DefaultDict:
-    """
-    Takes in a Q-table as a csv file and returns this information
-    as a dictionary that is indexed by each state-action pair.
-
-    :param file_path (str): The path to the file where the Q-table can be found.
-    """
-    q_table = defaultdict(lambda: 0)
-
-    try:
-        with open(file_path, 'r', newline='') as f:
-            reader = csv.reader(f)
-            next(reader)  # Skip the header
-            for row in reader:
-                state, action, q_value = row
-                q_table[(state, int(float(action)))] = float(q_value)
-
-    except FileNotFoundError:
-        pass  # If the file does not exist, return an empty q_table
-
-    return q_table
-
-
-def dump_q_table(q_table: DefaultDict, file_path: str):
-    """
-    Save the Q-table to a CSV file, updating existing entries or adding new ones.
-
-    :param q_table (DefaultDict): The Q-table to save.
-    :param file_path (str): The path to the file where the Q-table will be saved.
-    """
-    # Load the existing Q-table from the file
-    existing_q_table = load_q_table(file_path)
-
-    # Update existing Q-table with new entries
-    for (state, action), q_value in q_table.items():
-        existing_q_table[(state, action)] = q_value
-
-    # Write the updated Q-table back to the file
-    with open(file_path, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['State', 'Action', 'Q-Value'])  # Write the header
-        for (state, action), q_value in existing_q_table.items():
-            writer.writerow([state, action, q_value])
 
 def load_episode_data(file: str) -> Tuple[List, List, List]:
     obs_list, action_list, reward_list = [], [], []
@@ -85,12 +42,17 @@ def epsilon_decay(strat, epsilon, timestep, max_timestep, eps_start=1.0, eps_min
     return epsilon
 
 
-def learn(obs: List[int], actions: List[int], rewards: List[float]) -> Dict:
+def learn(obs: List[int], actions: List[int], rewards: List[float], type) -> Dict:
     # Load the current q_table from the CSV file
-    q_table = load_q_table('q_table.csv')
+    try:
+        if type == 'Buyer':
+            q_table = load_q_table('q_table_buyer.csv')
+        elif type == 'Seller':
+            q_table = load_q_table('q_table_seller.csv')
+    except:
+        q_table = defaultdict(lambda: 0)
 
     sa_counts = {}
-    q_table = defaultdict(lambda: 0)
     traj_length = len(rewards)
     G = 0
     state_action_list = list(zip([tuple(o) for o in obs], actions))
@@ -111,52 +73,25 @@ def learn(obs: List[int], actions: List[int], rewards: List[float]) -> Dict:
             
             # updated_values[state_action_pair] = q_table[state_action_pair]
 
-        # Save the updated q_table back to the CSV file
-    dump_q_table(q_table, 'q_table.csv')
+    # Save the updated q_table back to the CSV file
+    if type == 'Buyer':
+        dump_q_table(q_table, 'q_table_buyer.csv')
+    elif type == 'Seller':
+        dump_q_table(q_table, 'q_table_seller.csv')
     
     return q_table
 
 
-def q_learn(
-        obs: int, action: int, reward: float, n_obs: int, done: bool
-    ) -> float:
-        """Implements the Q-Learning method and updates 
-        the Q-table based on agent experience.
-
-        :param obs (int): received observation representing the current environmental state
-        :param action (int): index of applied action
-        :param reward (float): received reward
-        :param n_obs (int): received observation representing the next environmental state
-        :param done (bool): flag indicating whether a terminal state has been reached
-        :return (float): updated Q-value for current observation-action pair
-        """
-        # Load the current q_table from the CSV file
-        q_table = load_q_table('q_table.csv')
-
-        num_actions = 500
-
-        # Best action for the next state
-        a_ = np.argmax([q_table[(n_obs, a)] for a in range(num_actions)])
-
-        # Update Q-value using Q-learning update rule
-        q_table[(obs, action)] += (
-            alpha * (reward + gamma * q_table[(n_obs, a_)] * (1 - done) - q_table[(obs, action)])
-            )
-
-        obs = n_obs
-
-
-
-def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict) -> float:
+def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file) -> float:
     total_return = 0.0
     mean_return_list = []
-    
+
     for _ in range(episodes):
         balance = 0.0
         market_session(*market_params)
 
-        # Read the episode.csv file
-        with open('episode.csv', 'r') as f:
+        # Read the episode file
+        with open(file, 'r') as f:
             reader = csv.reader(f)
             next(reader)  # Skip the header
             for row in reader:
@@ -188,23 +123,44 @@ def train(episodes: int, market_params: tuple, eval_freq: int, epsilon) -> Defau
         # # Run one market session to get observations, actions, and rewards
         # market_session(*updated_market_params)
 
-        file = 'episode.csv'
-        obs_list, action_list, reward_list = load_episode_data(file)
-
-        # Learn from the experience
-        q_table = learn(obs_list, action_list, reward_list)
+        # Check if there's a buy trader
+        try:
+            file = 'episode_buyer.csv'
+            obs_list, action_list, reward_list = load_episode_data(file)
+            # Learn from the experience
+            q_table = learn(obs_list, action_list, reward_list, 'Buyer')
+        except:
+            pass
+        
+        # Check if there's a sell trader
+        try:
+            file = 'episode_seller.csv'
+            obs_list, action_list, reward_list = load_episode_data(file)
+            # Learn from the experience
+            q_table = learn(obs_list, action_list, reward_list, 'Seller')
+        except:
+            pass
             
         # Perform evaluation every `eval_freq` episodes
         if episode % eval_freq == 0:
             print(f"Training Episode {episode}/{episodes}")
-            mean_return, mean_return_list = evaluate(episodes=CONFIG['eval_episodes'], market_params=market_params, q_table=q_table)
-            tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN {mean_return}")
+
+            mean_return_buyer, mean_return_list = evaluate(
+                episodes=CONFIG['eval_episodes'], market_params=market_params, 
+                q_table=q_table, file='episode_buyer.csv'
+                )
+            
+            mean_return_seller, mean_return_list = evaluate(
+                episodes=CONFIG['eval_episodes'], market_params=market_params, 
+                q_table=q_table, file='episode_seller.csv'
+                )
+            tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN BUYER {mean_return_buyer}, MEAN RETURN SELLER - {mean_return_seller}")
 
     return q_table
 
 
 CONFIG = {
-    "total_eps": 10,
+    "total_eps": 100,
     "eval_freq": 100,
     "eval_episodes": 100,
     "gamma": 1.0,
@@ -216,8 +172,8 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 100.0
 
-buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table': 'q_table.csv', 'epsilon': CONFIG['epsilon']})]
-sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
+buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': CONFIG['epsilon']})]
+sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': CONFIG['epsilon']})]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
