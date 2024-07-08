@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 from collections import defaultdict
 from typing import List, Dict, DefaultDict, Tuple
 from q_table_data import load_q_table, dump_q_table
+from epsilon_scheduling import epsilon_decay
 
 
 gamma = 1.0
@@ -25,21 +26,6 @@ def load_episode_data(file: str) -> Tuple[List, List, List]:
             reward_list.append(float(row[2]))
 
     return obs_list, action_list, reward_list
-
-
-def epsilon_decay(strat, epsilon, timestep, max_timestep, eps_start=1.0, eps_min=0.05, eps_decay=0.01):
-
-    if strat == 'constant':
-        epsilon = 0.9
-
-    if strat == 'linear':
-        decay_steps = eps_decay * max_timestep
-        epsilon = max(eps_min, eps_start - (eps_start - eps_min) * min(1.0, timestep / decay_steps))
-
-    if strat == 'exponential':
-        epsilon = max(eps_min, eps_decay*epsilon)
-
-    return epsilon
 
 
 def learn(obs: List[int], actions: List[int], rewards: List[float], type) -> Dict:
@@ -82,9 +68,19 @@ def learn(obs: List[int], actions: List[int], rewards: List[float], type) -> Dic
     return q_table
 
 
+# Should change epsilon to 0.0 here so the agent doesn't explore
+# but rather just tries to maximise rewards
 def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file) -> float:
     total_return = 0.0
     mean_return_list = []
+
+    updated_market_params = list(market_params)    
+    if file == 'q_table_buyer.csv':
+        updated_market_params[3]['buyers'][4][2]['q_table_buyer'] = 'q_table_buyer.csv'
+        updated_market_params[3]['buyers'][4][2]['epsilon'] = 0.0                           # No exploring
+    elif file == 'q_table_seller.csv':
+        updated_market_params[3]['sellers'][4][2]['q_table_seller'] = 'q_table_seller.csv'
+        updated_market_params[3]['sellers'][4][2]['epsilon'] = 0.0                          # No exploring
 
     for _ in range(episodes):
         balance = 0.0
@@ -106,28 +102,26 @@ def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file) ->
 
     return mean_return, mean_return_list
 
-# Should change epsilon to 0.0 here so the agent doesn't explore
-# but rather just tries to maximise rewards
-def train(episodes: int, market_params: tuple, eval_freq: int, epsilon) -> DefaultDict:
-    for episode in range(1, episodes + 1):
 
-        market_session(*market_params)
+def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> DefaultDict:
+    for episode in range(1, total_eps + 1):
+        # market_session(*market_params)
         
-        # # Update market_params to include the current epsilon
-        # updated_market_params = list(market_params)
-        # if updated_market_params[3]['buyers'][4][0] == 'RL':
-        #     updated_market_params[3]['buyers'][4][2]['epsilon'] = epsilon
+        # Update market_params to include the current epsilon
+        updated_market_params = list(market_params)
+        updated_market_params[3]['buyers'][4][2]['epsilon'] = epsilon
         
-        # epsilon = epsilon_decay('linear', epsilon, episode, CONFIG['total_eps'])
+        # Epsilon scheduling
+        epsilon = epsilon_decay('linear', episode, total_eps)
 
-        # # Run one market session to get observations, actions, and rewards
-        # market_session(*updated_market_params)
+        # Run one market session to get observations, actions, and rewards
+        market_session(*updated_market_params)
 
         # Check if there's a buy trader
         try:
             file = 'episode_buyer.csv'
             obs_list, action_list, reward_list = load_episode_data(file)
-            # Learn from the experience
+            # Learn from the experience with the MC update
             q_table = learn(obs_list, action_list, reward_list, 'Buyer')
         except:
             pass
@@ -136,23 +130,23 @@ def train(episodes: int, market_params: tuple, eval_freq: int, epsilon) -> Defau
         try:
             file = 'episode_seller.csv'
             obs_list, action_list, reward_list = load_episode_data(file)
-            # Learn from the experience
+            # Learn from the experience with the MC update
             q_table = learn(obs_list, action_list, reward_list, 'Seller')
         except:
             pass
             
         # Perform evaluation every `eval_freq` episodes
         if episode % eval_freq == 0:
-            print(f"Training Episode {episode}/{episodes}")
+            print(f"Training Episode {episode}/{total_eps}")
 
             mean_return_buyer, mean_return_list = evaluate(
                 episodes=CONFIG['eval_episodes'], market_params=market_params, 
-                q_table=q_table, file='episode_buyer.csv'
+                q_table='q_table_buyer.csv', file='episode_buyer.csv'
                 )
             
             mean_return_seller, mean_return_list = evaluate(
                 episodes=CONFIG['eval_episodes'], market_params=market_params, 
-                q_table=q_table, file='episode_seller.csv'
+                q_table='q_table_seller.csv', file='episode_seller.csv'
                 )
             tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN BUYER {mean_return_buyer}, MEAN RETURN SELLER - {mean_return_seller}")
 
@@ -160,7 +154,7 @@ def train(episodes: int, market_params: tuple, eval_freq: int, epsilon) -> Defau
 
 
 CONFIG = {
-    "total_eps": 100,
+    "total_eps": 1000,
     "eval_freq": 100,
     "eval_episodes": 100,
     "gamma": 1.0,
@@ -194,11 +188,8 @@ verbose = False
 
 
 # Training the RL agent with evaluation
-q_table = train(episodes=CONFIG['total_eps'], 
+q_table = train(total_eps=CONFIG['total_eps'], 
                 market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
                 eval_freq=CONFIG['eval_freq'],
                 epsilon=CONFIG['epsilon'])
-
-
-
 
