@@ -17,9 +17,6 @@ strat = 'linear'
 max_timestep = 100
 eps_decay = 0.8
 
-for timestep in range(max_timestep):
-    eps = epsilon_decay(strat, timestep, max_timestep, eps_decay=eps_decay)
-    print(f"The epsilon is {eps}")
 
 
 
