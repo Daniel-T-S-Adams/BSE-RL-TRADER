@@ -81,7 +81,7 @@ def calc_average_price(list):
         return weighted_average_price   
 
 
-def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=10):
+def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=5):
     """
     Given a value, calculates the bin it would fall into
     and returns the average of that bin.
@@ -120,9 +120,12 @@ def get_discrete_state(type, lob, time, order):
     avg_bid = bin_average(calc_average_price(lob['bids']['lob']))
     avg_ask = bin_average(calc_average_price(lob['asks']['lob']))
 
-    observation = np.array([type, float(int(time)), float(order), 
-                            float(best_bid), float(best_ask), float(worst_bid), 
-                            float(worst_ask), float(avg_bid), float(avg_ask)])
+    # observation = np.array([type, float(int(time)), float(order), 
+    #                         float(best_bid), float(best_ask), float(worst_bid), 
+    #                         float(worst_ask), float(avg_bid), float(avg_ask)])
+
+    observation = np.array([type, float(order), float(best_bid), float(best_ask), 
+                            float(avg_bid), float(avg_ask)])
     
     return observation
 

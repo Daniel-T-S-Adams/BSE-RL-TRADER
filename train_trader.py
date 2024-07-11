@@ -117,7 +117,6 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
         try:
             file = 'episode_buyer.csv'
             obs_list, action_list, reward_list = load_episode_data(file)
-            # print(obs_list)
             # Learn from the experience with the MC update
             q_table = learn(obs_list, action_list, reward_list, 'Buyer')
             
@@ -146,15 +145,15 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
                 episodes=CONFIG['eval_episodes'], market_params=market_params, 
                 q_table='q_table_seller.csv', file='episode_seller.csv'
                 )
-            tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN BUYER {mean_return_buyer}, MEAN RETURN SELLER - {mean_return_seller}")
+            tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN BUYER {mean_return_buyer}, MEAN RETURN SELLER {mean_return_seller}")
 
     return q_table
 
 
 CONFIG = {
-    "total_eps": 100,
+    "total_eps": 10,
     "eval_freq": 10,
-    "eval_episodes": 10,
+    "eval_episodes": 100,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -162,17 +161,17 @@ CONFIG = {
 # Define market parameters
 sess_id = 'session_1'
 start_time = 0.0
-end_time = 100.0
+end_time = 60.0
 
 buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': CONFIG['epsilon']})]
 sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': CONFIG['epsilon']})]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
-range1 = (50, 150)
+range1 = (100, 150)
 supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-range2 = (50, 150)
+range2 = (100, 150)
 demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
 # new customer orders arrive at each trader approx once every order_interval seconds
