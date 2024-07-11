@@ -21,7 +21,8 @@ def load_episode_data(file: str) -> Tuple[List, List, List]:
         reader = csv.reader(f)
         next(reader)  # Skip the header
         for row in reader:
-            obs_list.append(np.fromstring(row[0].strip('[]'), sep=' '))
+            obs_str = row[0].strip('[]').split()[1:]
+            obs_list.append(np.array([float(x.strip("'")) for x in obs_str]))        # Convert the string values to floats
             action_list.append(int(float(row[1])))
             reward_list.append(float(row[2]))
 
@@ -116,8 +117,10 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
         try:
             file = 'episode_buyer.csv'
             obs_list, action_list, reward_list = load_episode_data(file)
+            # print(obs_list)
             # Learn from the experience with the MC update
             q_table = learn(obs_list, action_list, reward_list, 'Buyer')
+            
         except:
             pass
         
@@ -129,7 +132,7 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
             q_table = learn(obs_list, action_list, reward_list, 'Seller')
         except:
             pass
-            
+        
         # Perform evaluation every `eval_freq` episodes
         if episode % eval_freq == 0:
             print(f"Training Episode {episode}/{total_eps}")

@@ -112,7 +112,7 @@ def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, b
     return int(bin_average)
 
 
-def get_discrete_state(lob, time, order):
+def get_discrete_state(type, lob, time, order):
     best_bid = bin_average(lob['bids']['best'])
     best_ask = bin_average(lob['asks']['best'])
     worst_bid = bin_average(lob['bids']['worst'])
@@ -120,9 +120,9 @@ def get_discrete_state(lob, time, order):
     avg_bid = bin_average(calc_average_price(lob['bids']['lob']))
     avg_ask = bin_average(calc_average_price(lob['asks']['lob']))
 
-    observation = np.array([float(int(time)), float(order), float(best_bid), 
-                            float(best_ask), float(worst_bid), float(worst_ask),
-                            float(avg_bid), float(avg_ask)])
+    observation = np.array([type, float(int(time)), float(order), 
+                            float(best_bid), float(best_ask), float(worst_bid), 
+                            float(worst_ask), float(avg_bid), float(avg_ask)])
     
     return observation
 
@@ -2076,7 +2076,7 @@ class RLAgent(Trader):
                 file = 'episode_seller.csv'
 
             # Write the current state, action and reward
-            obs = get_discrete_state(lob, time, self.orders[0].price)
+            obs = get_discrete_state(self.type, lob, time, self.orders[0].price)
             action = quote
             reward = 0.0
             with open(file, 'a', newline='') as f:
