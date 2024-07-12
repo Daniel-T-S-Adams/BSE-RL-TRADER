@@ -66,7 +66,7 @@ import numpy as np
 
 # a bunch of system constants (globals)
 bse_sys_minprice = 1                    # minimum price in the system, in cents/pennies
-bse_sys_maxprice = 50                  # maximum price in the system, in cents/pennies
+bse_sys_maxprice = 9                    # maximum price in the system, in cents/pennies
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
 
@@ -81,7 +81,7 @@ def calc_average_price(list):
         return weighted_average_price   
 
 
-def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=5):
+def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=3):
     """
     Given a value, calculates the bin it would fall into
     and returns the average of that bin.
@@ -1880,8 +1880,6 @@ class RLAgent(Trader):
         self.gamma: float = gamma
         self.epsilon: float = epsilon
         self.q_table:DefaultDict = defaultdict(lambda: 0)
-        # self.q_table_buyer:DefaultDict = defaultdict(lambda: 0)
-        # self.q_table_seller:DefaultDict = defaultdict(lambda: 0)
 
         if self.tid[:1] == 'B':
             self.type = 'Buyer'
@@ -2780,11 +2778,12 @@ if __name__ == "__main__":
     #                     {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':'fixed'}
     #                   ]
 
-    range1 = (20, 30)
+    # range1 = (50, 150)
+    range1 = (4, 6)
     supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
     # range2 = (50, 150)
-    range2 = (20, 30)
+    range2 = (4, 6)
     demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
     # new customer orders arrive at each trader approx once every order_interval seconds
@@ -2826,7 +2825,7 @@ if __name__ == "__main__":
         sellers_spec = [('ZIPSH', 10, {'k': 4})]
 
         buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
-        sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': 0.9})]
+        sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 

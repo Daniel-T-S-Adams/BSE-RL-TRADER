@@ -109,8 +109,7 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
         
         # Epsilon scheduling
         epsilon = epsilon_decay('linear', episode, total_eps)
-
-        # Run one market session to get observations, actions, and rewards
+        # # Run one market session to get observations, actions, and rewards
         market_session(*updated_market_params)
 
         # Check if there's a buy trader
@@ -118,7 +117,7 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
             file = 'episode_buyer.csv'
             obs_list, action_list, reward_list = load_episode_data(file)
             # Learn from the experience with the MC update
-            q_table = learn(obs_list, action_list, reward_list, 'Buyer')
+            q_table_buyer = learn(obs_list, action_list, reward_list, 'Buyer')
             
         except:
             pass
@@ -128,7 +127,7 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
             file = 'episode_seller.csv'
             obs_list, action_list, reward_list = load_episode_data(file)
             # Learn from the experience with the MC update
-            q_table = learn(obs_list, action_list, reward_list, 'Seller')
+            q_table_seller = learn(obs_list, action_list, reward_list, 'Seller')
         except:
             pass
         
@@ -147,13 +146,13 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
                 )
             tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN SELLER {mean_return_seller}")
 
-    return q_table
+    return q_table_seller
 
 
 CONFIG = {
     "total_eps": 10,
     "eval_freq": 10,
-    "eval_episodes": 10,
+    "eval_episodes": 100,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -168,10 +167,10 @@ sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'ep
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
-range1 = (20, 30)
+range1 = (4, 6)
 supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-range2 = (20, 30)
+range2 = (4, 6)
 demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
 # new customer orders arrive at each trader approx once every order_interval seconds
