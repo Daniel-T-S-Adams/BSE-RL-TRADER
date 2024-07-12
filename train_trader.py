@@ -42,18 +42,33 @@ def learn(obs: List[int], actions: List[int], rewards: List[float], type) -> Dic
     sa_counts = defaultdict(lambda: 0)
     traj_length = len(rewards)
     G = 0
-    
-    # Precompute returns G for every timestep
-    G = [ 0 for n in range(traj_length) ]
-    G[-1] = rewards[-1]
-    for t in range(traj_length - 2, -1, -1):
-        G[t] = rewards[t] + gamma * G[t + 1]
+    state_action_list = list(zip([tuple(o) for o in obs], actions))
 
-    # Update Q-values using every-visit MC method
-    for t in range(traj_length):
+    # Iterate over the trajectory backwards
+    for t in range(traj_length - 1, -1, -1):
         state_action_pair = (tuple(obs[t]), actions[t])
-        sa_counts[state_action_pair] += 1
-        q_table[state_action_pair] += (G[t] - q_table[state_action_pair]) / sa_counts[state_action_pair]
+
+        # Check if this is the first visit to the state-action pair
+        if state_action_pair not in state_action_list[:t]:
+            G = gamma*G + rewards[t]
+
+            # Monte-Carlo update rule
+            sa_counts[state_action_pair] = sa_counts.get(state_action_pair, 0) + 1
+            q_table[state_action_pair] += (
+                G - q_table[state_action_pair]
+                ) / sa_counts.get(state_action_pair, 0)
+    
+    # # Precompute returns G for every timestep
+    # G = [ 0 for n in range(traj_length) ]
+    # G[-1] = rewards[-1]
+    # for t in range(traj_length - 2, -1, -1):
+    #     G[t] = rewards[t] + gamma * G[t + 1]
+
+    # # Update Q-values using every-visit MC method
+    # for t in range(traj_length):
+    #     state_action_pair = (tuple(obs[t]), actions[t])
+    #     sa_counts[state_action_pair] += 1
+    #     q_table[state_action_pair] += (G[t] - q_table[state_action_pair]) / sa_counts[state_action_pair]
 
     # Save the updated q_table back to the CSV file
     if type == 'Buyer':
@@ -150,8 +165,8 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
 
 CONFIG = {
-    "total_eps": 10,
-    "eval_freq": 10,
+    "total_eps": 100,
+    "eval_freq": 100,
     "eval_episodes": 100,
     "gamma": 1.0,
     "epsilon": 1.0,
