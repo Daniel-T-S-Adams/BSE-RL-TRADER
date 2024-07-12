@@ -66,7 +66,7 @@ import numpy as np
 
 # a bunch of system constants (globals)
 bse_sys_minprice = 1                    # minimum price in the system, in cents/pennies
-bse_sys_maxprice = 500                  # maximum price in the system, in cents/pennies
+bse_sys_maxprice = 50                  # maximum price in the system, in cents/pennies
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
 
@@ -124,8 +124,8 @@ def get_discrete_state(type, lob, time, order):
     #                         float(best_bid), float(best_ask), float(worst_bid), 
     #                         float(worst_ask), float(avg_bid), float(avg_ask)])
 
-    observation = np.array([type, float(order), float(best_bid), float(best_ask), 
-                            float(avg_bid), float(avg_ask)])
+    observation = np.array([type, float(order), float(best_bid), float(best_ask), float(worst_bid), 
+                            float(worst_ask), float(avg_bid), float(avg_ask)])
     
     return observation
 
@@ -2780,10 +2780,11 @@ if __name__ == "__main__":
     #                     {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':'fixed'}
     #                   ]
 
-    range1 = (50, 150)
+    range1 = (20, 30)
     supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-    range2 = (50, 150)
+    # range2 = (50, 150)
+    range2 = (20, 30)
     demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
     # new customer orders arrive at each trader approx once every order_interval seconds
@@ -2824,7 +2825,7 @@ if __name__ == "__main__":
         buyers_spec = [('ZIPSH', 10, {'k': 4})]
         sellers_spec = [('ZIPSH', 10, {'k': 4})]
 
-        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': 0.9})]
+        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
         sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': 0.9})]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}

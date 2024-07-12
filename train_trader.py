@@ -105,7 +105,7 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
         
         # Update market_params to include the current epsilon
         updated_market_params = list(market_params)
-        updated_market_params[3]['buyers'][4][2]['epsilon'] = epsilon
+        updated_market_params[3]['sellers'][4][2]['epsilon'] = epsilon
         
         # Epsilon scheduling
         epsilon = epsilon_decay('linear', episode, total_eps)
@@ -136,16 +136,16 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
         if episode % eval_freq == 0:
             print(f"Training Episode {episode}/{total_eps}")
 
-            mean_return_buyer, mean_return_list = evaluate(
-                episodes=CONFIG['eval_episodes'], market_params=market_params, 
-                q_table='q_table_buyer.csv', file='episode_buyer.csv'
-                )
+            # mean_return_buyer, mean_return_list = evaluate(
+            #     episodes=CONFIG['eval_episodes'], market_params=market_params, 
+            #     q_table='q_table_buyer.csv', file='episode_buyer.csv'
+            #     )
             
             mean_return_seller, mean_return_list = evaluate(
                 episodes=CONFIG['eval_episodes'], market_params=market_params, 
                 q_table='q_table_seller.csv', file='episode_seller.csv'
                 )
-            tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN BUYER {mean_return_buyer}, MEAN RETURN SELLER {mean_return_seller}")
+            tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN SELLER {mean_return_seller}")
 
     return q_table
 
@@ -153,7 +153,7 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 CONFIG = {
     "total_eps": 10,
     "eval_freq": 10,
-    "eval_episodes": 100,
+    "eval_episodes": 10,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -163,15 +163,15 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 60.0
 
-buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': CONFIG['epsilon']})]
+buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
 sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': CONFIG['epsilon']})]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
-range1 = (100, 150)
+range1 = (20, 30)
 supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-range2 = (100, 150)
+range2 = (20, 30)
 demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
 # new customer orders arrive at each trader approx once every order_interval seconds
