@@ -66,7 +66,7 @@ import numpy as np
 
 # a bunch of system constants (globals)
 bse_sys_minprice = 1                    # minimum price in the system, in cents/pennies
-bse_sys_maxprice = 9                    # maximum price in the system, in cents/pennies
+bse_sys_maxprice = 100                    # maximum price in the system, in cents/pennies
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
 
@@ -81,7 +81,7 @@ def calc_average_price(list):
         return weighted_average_price   
 
 
-def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=3):
+def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=5):
     """
     Given a value, calculates the bin it would fall into
     and returns the average of that bin.
@@ -2779,11 +2779,11 @@ if __name__ == "__main__":
     #                   ]
 
     # range1 = (50, 150)
-    range1 = (4, 6)
+    range1 = (30, 70)
     supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
     # range2 = (50, 150)
-    range2 = (4, 6)
+    range2 = (30, 70)
     demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
     # new customer orders arrive at each trader approx once every order_interval seconds

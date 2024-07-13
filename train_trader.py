@@ -165,9 +165,9 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
 
 CONFIG = {
-    "total_eps": 30000,
-    "eval_freq": 300,
-    "eval_episodes": 1000,
+    "total_eps": 1000,
+    "eval_freq": 100,
+    "eval_episodes": 100,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -182,10 +182,10 @@ sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'ep
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
-range1 = (4, 6)
+range1 = (30, 70)
 supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-range2 = (4, 6)
+range2 = (30, 70)
 demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
 # new customer orders arrive at each trader approx once every order_interval seconds
