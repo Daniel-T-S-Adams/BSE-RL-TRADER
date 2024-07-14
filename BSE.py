@@ -2080,7 +2080,7 @@ class RLAgent(Trader):
             elif self.type == 'Seller' and quote < self.orders[0].price:
                 quote = self.orders[0].price
 
-            order = Order(self.tid, order_type, int(quote), self.orders[0].qty, time, lob['QID'])
+            order = Order(self.tid, order_type, (quote), self.orders[0].qty, time, lob['QID'])
 
             if self.type == 'Buyer':
                 file = 'episode_buyer.csv'

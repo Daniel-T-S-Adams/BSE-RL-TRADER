@@ -165,9 +165,9 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
 
 CONFIG = {
-    "total_eps": 100000,
-    "eval_freq": 10000,
-    "eval_episodes": 1000,
+    "total_eps": 1000,
+    "eval_freq": 100,
+    "eval_episodes": 100,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
