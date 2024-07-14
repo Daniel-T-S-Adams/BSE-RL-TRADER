@@ -66,7 +66,7 @@ import numpy as np
 
 # a bunch of system constants (globals)
 bse_sys_minprice = 1                    # minimum price in the system, in cents/pennies
-bse_sys_maxprice = 100                    # maximum price in the system, in cents/pennies
+bse_sys_maxprice = 50                    # maximum price in the system, in cents/pennies
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
 
@@ -1897,7 +1897,8 @@ class RLAgent(Trader):
             if 'epsilon' in params:
                 self.epsilon = params['epsilon']
         
-        self.num_actions = spaces.flatdim(action_space)
+        # self.num_actions = spaces.flatdim(action_space)
+        self.num_actions = len(self.action_space)
         self.sa_counts = {}
         self.current_obs = None
         self.old_balance = 0
@@ -2051,15 +2052,19 @@ class RLAgent(Trader):
             # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
                 if self.type == 'Buyer':
-                    quote = bse_sys_minprice + self.action_space.sample()
+                    # quote = bse_sys_minprice + self.action_space.sample()
+                    quote = self.orders[0].price * (1 - random.choice(self.action_space))
                 elif self.type == 'Seller':
-                    quote = bse_sys_maxprice - self.action_space.sample()
+                    # quote = bse_sys_maxprice - self.action_space.sample()
+                    quote = self.orders[0].price * (1 + random.choice(self.action_space))
             # Exploit - choose the action with the highest probability
             else:
                 if self.type == 'Buyer':
-                    quote = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+                    # quote = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+                    quote = self.orders[0].price * (1 - random.choice(self.action_space))
                 elif self.type == 'Seller':
-                    quote = bse_sys_maxprice - max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+                    # quote = bse_sys_maxprice - max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)]
+                    quote = self.orders[0].price * (1 + random.choice(self.action_space))
 
             # Check if it's a bad bid
             if self.type == 'Buyer' and quote > self.orders[0].price:
@@ -2069,7 +2074,7 @@ class RLAgent(Trader):
             elif self.type == 'Seller' and quote < self.orders[0].price:
                 quote = self.orders[0].price
 
-            order = Order(self.tid, order_type, quote, self.orders[0].qty, time, lob['QID'])
+            order = Order(self.tid, order_type, int(quote), self.orders[0].qty, time, lob['QID'])
 
             if self.type == 'Buyer':
                 file = 'episode_buyer.csv'
@@ -2203,7 +2208,7 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             return Trader_PRZI('PRDE', name, balance, parameters, time0)
         elif robottype == 'RL':
             return RLAgent('RL', name, balance, parameters, time0, 
-                           action_space=spaces.Discrete(bse_sys_maxprice - bse_sys_minprice + 1), 
+                           action_space=[0.03, 0.06, 0.09, 0.12, 0.15], 
                            obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
@@ -2379,7 +2384,8 @@ def customer_orders(time, last_update, traders, trader_stats, os, pending, verbo
         pmin = sysmin_check(offset_min + min(sched[0][0], sched[0][1]))
         pmax = sysmax_check(offset_max + max(sched[0][0], sched[0][1]))
         prange = pmax - pmin
-        stepsize = prange / (n - 1)
+        # stepsize = prange / (n - 1)
+        stepsize = prange / (n)
         halfstep = round(stepsize / 2.0)
 
         if mode == 'fixed':
@@ -2675,7 +2681,7 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
         # get a limit-order quote (or None) from a randomly chosen trader
         tid = list(traders.keys())[random.randint(0, len(traders) - 1)]
         order = traders[tid].getorder(time, time_left, exchange.publish_lob(time, lobframes, lob_verbose))
-
+        
         # if verbose: print('Trader Quote: %s' % (order))
 
         if order is not None:
@@ -2751,7 +2757,7 @@ if __name__ == "__main__":
     n_days = 10
     start_time = 0.0
     # end_time = 60.0 * 60.0 * 24 * n_days
-    end_time = 500.0
+    end_time = 100.0
     duration = end_time - start_time
 
     # schedule_offsetfn returns time-dependent offset, to be added to schedule prices
@@ -2779,11 +2785,11 @@ if __name__ == "__main__":
     #                   ]
 
     # range1 = (50, 150)
-    range1 = (30, 70)
+    range1 = (20, 40)
     supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
     # range2 = (50, 150)
-    range2 = (30, 70)
+    range2 = (20, 40)
     demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
     # new customer orders arrive at each trader approx once every order_interval seconds
@@ -2824,8 +2830,10 @@ if __name__ == "__main__":
         buyers_spec = [('ZIPSH', 10, {'k': 4})]
         sellers_spec = [('ZIPSH', 10, {'k': 4})]
 
-        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
-        sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
+        # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
+        # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
+        sellers_spec = [('RL', 1, {'epsilon': 1.0})]
+        buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 

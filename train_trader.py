@@ -87,11 +87,11 @@ def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file) ->
 
     updated_market_params = list(market_params)    
     if file == 'q_table_buyer.csv':
-        updated_market_params[3]['buyers'][4][2]['q_table_buyer'] = 'q_table_buyer.csv'
-        updated_market_params[3]['buyers'][4][2]['epsilon'] = 0.0                           # No exploring
+        updated_market_params[3]['buyers'][0][2]['q_table_buyer'] = 'q_table_buyer.csv'
+        updated_market_params[3]['buyers'][0][2]['epsilon'] = 0.0                           # No exploring
     elif file == 'q_table_seller.csv':
-        updated_market_params[3]['sellers'][4][2]['q_table_seller'] = 'q_table_seller.csv'
-        updated_market_params[3]['sellers'][4][2]['epsilon'] = 0.0                          # No exploring
+        updated_market_params[3]['sellers'][0][2]['q_table_seller'] = 'q_table_seller.csv'
+        updated_market_params[3]['sellers'][0][2]['epsilon'] = 0.0                          # No exploring
 
     for _ in range(episodes):
         balance = 0.0
@@ -116,16 +116,16 @@ def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file) ->
 
 def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> DefaultDict:
     for episode in range(1, total_eps + 1):
-        # market_session(*market_params)
+        market_session(*market_params)
         
-        # Update market_params to include the current epsilon
-        updated_market_params = list(market_params)
-        updated_market_params[3]['sellers'][4][2]['epsilon'] = epsilon
+        # # Update market_params to include the current epsilon
+        # updated_market_params = list(market_params)
+        # updated_market_params[3]['sellers'][0][2]['epsilon'] = epsilon
         
-        # Epsilon scheduling
-        epsilon = epsilon_decay('linear', episode, total_eps)
-        # # Run one market session to get observations, actions, and rewards
-        market_session(*updated_market_params)
+        # # Epsilon scheduling
+        # epsilon = epsilon_decay('linear', episode, total_eps)
+        # # # Run one market session to get observations, actions, and rewards
+        # market_session(*updated_market_params)
 
         # Check if there's a buy trader
         try:
@@ -175,17 +175,17 @@ CONFIG = {
 # Define market parameters
 sess_id = 'session_1'
 start_time = 0.0
-end_time = 60.0
+end_time = 100.0
 
-buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
-sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': CONFIG['epsilon']})]
+sellers_spec = [('RL', 1, {'epsilon': 1.0})]
+buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
-range1 = (30, 70)
+range1 = (20, 40)
 supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-range2 = (30, 70)
+range2 = (20, 40)
 demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
 # new customer orders arrive at each trader approx once every order_interval seconds
