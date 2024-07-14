@@ -2053,18 +2053,22 @@ class RLAgent(Trader):
             if random.uniform(0, 1) < self.epsilon:
                 if self.type == 'Buyer':
                     # quote = bse_sys_minprice + self.action_space.sample()
-                    quote = self.orders[0].price * (1 - random.choice(self.action_space))
+                    profit = random.choice(self.action_space)
+                    quote = self.orders[0].price * (1 - profit)
                 elif self.type == 'Seller':
                     # quote = bse_sys_maxprice - self.action_space.sample()
-                    quote = self.orders[0].price * (1 + random.choice(self.action_space))
+                    profit = random.choice(self.action_space)
+                    quote = self.orders[0].price * (1 + profit)
             # Exploit - choose the action with the highest probability
             else:
                 if self.type == 'Buyer':
                     # quote = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
-                    quote = self.orders[0].price * (1 - random.choice(self.action_space))
+                    profit = max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+                    quote = self.orders[0].price * (1 - profit)
                 elif self.type == 'Seller':
                     # quote = bse_sys_maxprice - max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)]
-                    quote = self.orders[0].price * (1 + random.choice(self.action_space))
+                    profit = max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+                    quote = self.orders[0].price * (1 + profit)
 
             # Check if it's a bad bid
             if self.type == 'Buyer' and quote > self.orders[0].price:
@@ -2083,7 +2087,7 @@ class RLAgent(Trader):
 
             # Write the current state, action and reward
             obs = get_discrete_state(self.type, lob, time, self.orders[0].price)
-            action = quote
+            action = profit
             reward = 0.0
             with open(file, 'a', newline='') as f:
                 writer = csv.writer(f)

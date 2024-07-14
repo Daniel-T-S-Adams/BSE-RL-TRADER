@@ -23,7 +23,7 @@ def load_episode_data(file: str) -> Tuple[List, List, List]:
         for row in reader:
             obs_str = row[0].strip('[]').split()[1:]
             obs_list.append(np.array([float(x.strip("'")) for x in obs_str]))        # Convert the string values to floats
-            action_list.append(int(float(row[1])))
+            action_list.append((float(row[1])))
             reward_list.append(float(row[2]))
 
     return obs_list, action_list, reward_list
@@ -165,9 +165,9 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
 
 CONFIG = {
-    "total_eps": 1000,
-    "eval_freq": 100,
-    "eval_episodes": 100,
+    "total_eps": 10,
+    "eval_freq": 1,
+    "eval_episodes": 10,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
