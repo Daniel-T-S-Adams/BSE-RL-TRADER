@@ -29,7 +29,7 @@ def load_episode_data(file: str) -> Tuple[List, List, List]:
     return obs_list, action_list, reward_list
 
 
-def learn(obs: List[int], actions: List[int], rewards: List[float], type) -> Dict:
+def learn(obs: List[int], actions: List[int], rewards: List[float], type, episode) -> Dict:
     # Load the current q_table from the CSV file
     try:
         if type == 'Buyer':
@@ -142,7 +142,7 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
             file = 'episode_seller.csv'
             obs_list, action_list, reward_list = load_episode_data(file)
             # Learn from the experience with the MC update
-            q_table_seller = learn(obs_list, action_list, reward_list, 'Seller')
+            q_table_seller = learn(obs_list, action_list, reward_list, 'Seller', episode)
         except:
             pass
         
@@ -165,9 +165,9 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
 
 CONFIG = {
-    "total_eps": 1000,
-    "eval_freq": 100,
-    "eval_episodes": 100,
+    "total_eps": 100000,
+    "eval_freq": 10000,
+    "eval_episodes": 1000,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -175,21 +175,21 @@ CONFIG = {
 # Define market parameters
 sess_id = 'session_1'
 start_time = 0.0
-end_time = 15.0
+end_time = 30.0
 
-sellers_spec = [('RL', 4, {'epsilon': 1.0})]
-buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
+sellers_spec = [('RL', 2, {'epsilon': 1.0})]
+buyers_spec = [('ZIC', 20)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
-range1 = (20, 40)
+range1 = (4, 6)
 supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-range2 = (20, 40)
+range2 = (4, 6)
 demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
 # new customer orders arrive at each trader approx once every order_interval seconds
-order_interval = 15
+order_interval = 30
 
 order_schedule = {'sup': supply_schedule, 'dem': demand_schedule,
                 'interval': order_interval, 'timemode': 'drip-poisson'}

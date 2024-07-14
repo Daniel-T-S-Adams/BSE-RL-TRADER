@@ -66,7 +66,7 @@ import numpy as np
 
 # a bunch of system constants (globals)
 bse_sys_minprice = 1                    # minimum price in the system, in cents/pennies
-bse_sys_maxprice = 50                    # maximum price in the system, in cents/pennies
+bse_sys_maxprice = 9                    # maximum price in the system, in cents/pennies
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
 
@@ -124,8 +124,10 @@ def get_discrete_state(type, lob, time, order):
     #                         float(best_bid), float(best_ask), float(worst_bid), 
     #                         float(worst_ask), float(avg_bid), float(avg_ask)])
 
-    observation = np.array([type, float(order), float(best_bid), float(best_ask), float(worst_bid), 
-                            float(worst_ask), float(avg_bid), float(avg_ask)])
+    # observation = np.array([type, float(order), float(best_bid), float(best_ask), float(worst_bid), 
+    #                         float(worst_ask), float(avg_bid), float(avg_ask)])
+
+    observation = np.array([type, float(order), float(best_bid), float(best_ask)])
     
     return observation
 
@@ -2789,15 +2791,15 @@ if __name__ == "__main__":
     #                   ]
 
     # range1 = (50, 150)
-    range1 = (20, 40)
+    range1 = (4, 6)
     supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
     # range2 = (50, 150)
-    range2 = (20, 40)
+    range2 = (4, 6)
     demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
     # new customer orders arrive at each trader approx once every order_interval seconds
-    order_interval = 15
+    order_interval = 30
 
     order_sched = {'sup': supply_schedule, 'dem': demand_schedule,
                    'interval': order_interval, 'timemode': 'drip-poisson'}
@@ -2836,8 +2838,8 @@ if __name__ == "__main__":
 
         # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
         # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
-        sellers_spec = [('RL', 4, {'epsilon': 1.0})]
-        buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
+        sellers_spec = [('RL', 2, {'epsilon': 1.0})]
+        buyers_spec = [('ZIC', 20)]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
