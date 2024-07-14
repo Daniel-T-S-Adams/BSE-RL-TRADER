@@ -19,7 +19,7 @@ def load_q_table(file_path: str) -> DefaultDict:
             next(reader)  # Skip the header
             for row in reader:
                 state, action, q_value = row
-                q_table[(state, int(float(action)))] = float(q_value)
+                q_table[(state, (float(action)))] = float(q_value)
 
     except FileNotFoundError:
         pass  # If the file does not exist, return an empty q_table

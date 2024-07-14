@@ -165,9 +165,9 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
 
 CONFIG = {
-    "total_eps": 10,
-    "eval_freq": 1,
-    "eval_episodes": 10,
+    "total_eps": 1000,
+    "eval_freq": 100,
+    "eval_episodes": 100,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -175,9 +175,9 @@ CONFIG = {
 # Define market parameters
 sess_id = 'session_1'
 start_time = 0.0
-end_time = 100.0
+end_time = 15.0
 
-sellers_spec = [('RL', 1, {'epsilon': 1.0})]
+sellers_spec = [('RL', 4, {'epsilon': 1.0})]
 buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}

@@ -2388,8 +2388,8 @@ def customer_orders(time, last_update, traders, trader_stats, os, pending, verbo
         pmin = sysmin_check(offset_min + min(sched[0][0], sched[0][1]))
         pmax = sysmax_check(offset_max + max(sched[0][0], sched[0][1]))
         prange = pmax - pmin
-        # stepsize = prange / (n - 1)
-        stepsize = prange / (n)
+        stepsize = prange / (n - 1)
+        # stepsize = prange / (n)
         halfstep = round(stepsize / 2.0)
 
         if mode == 'fixed':
@@ -2836,7 +2836,7 @@ if __name__ == "__main__":
 
         # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
         # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
-        sellers_spec = [('RL', 1, {'epsilon': 1.0})]
+        sellers_spec = [('RL', 4, {'epsilon': 1.0})]
         buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
