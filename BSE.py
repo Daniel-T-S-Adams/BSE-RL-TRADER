@@ -63,6 +63,12 @@ from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
 
+import torch
+from torch import nn, Tensor
+from torch.optim import Adam
+
+from neural_network import Network
+
 
 # a bunch of system constants (globals)
 bse_sys_minprice = 1                    # minimum price in the system, in cents/pennies
@@ -2050,7 +2056,8 @@ class RLAgent(Trader):
         else:
             order_type = self.orders[0].otype
             # return the best action following an epsilon-greedy policy
-            obs = self.current_obs
+            # obs = self.current_obs
+            obs = tuple(get_discrete_state(self.type, lob, time, self.orders[0].price))
             # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
                 if self.type == 'Buyer':
@@ -2065,11 +2072,11 @@ class RLAgent(Trader):
             else:
                 if self.type == 'Buyer':
                     # quote = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
-                    profit = max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+                    profit = max(list(range(self.num_actions)), key = lambda x: self.q_table[(obs, x)])
                     quote = self.orders[0].price * (1 - profit)
                 elif self.type == 'Seller':
                     # quote = bse_sys_maxprice - max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)]
-                    profit = max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
+                    profit = max(list(range(self.num_actions)), key = lambda x: self.q_table[(obs, x)])
                     quote = self.orders[0].price * (1 + profit)
 
             # Check if it's a bad bid
@@ -2086,9 +2093,9 @@ class RLAgent(Trader):
                 file = 'episode_buyer.csv'
             elif self.type == 'Seller':
                 file = 'episode_seller.csv'
-
+            
             # Write the current state, action and reward
-            obs = get_discrete_state(self.type, lob, time, self.orders[0].price)
+            # obs = get_discrete_state(self.type, lob, time, self.orders[0].price)
             action = profit
             reward = 0.0
             with open(file, 'a', newline='') as f:
@@ -2128,6 +2135,103 @@ class RLAgent(Trader):
         
         # return q_table
         return None
+    
+
+
+class Reinforce(RLAgent):
+    def __init__(
+            self,
+            ttype, 
+            tid, 
+            balance, 
+            params, 
+            time, 
+            action_space: spaces.Space, 
+            obs_space: spaces.Space, 
+            learning_rate, 
+            gamma=1.0, 
+            epsilon=0.9,
+    ):
+        
+        super().__init__(ttype, tid, balance, params, time, action_space, obs_space, gamma, epsilon)
+        state_size = np.prod(obs_space.shape)
+        action_size = len(action_space)
+        self.learning_rate = learning_rate
+
+        self.policy = Network(
+            dims=(state_size, 32, action_size), output_activation=nn.Softmax(dim=-1)
+            )
+        
+        self.policy_optim = Adam(self.policy.parameters(), lr=learning_rate, eps=1e-3)
+
+
+    def getorder(self, time, countdown, lob):
+        if len(self.orders) < 1:
+            order = None
+
+        else:
+            obs = self.current_obs
+            state = torch.tensor(obs, dtype=torch.float32).flatten()
+            action_prob = self.policy(state)
+
+            # Explore - sample a random action
+            if random.uniform(0, 1) < self.epsilon:
+                if self.type == 'Buyer':
+                    action = np.random.choice(self.action_space.n)
+                    quote = self.orders[0].price * (1 - action)
+                elif self.type == 'Seller':
+                    action = np.random.choice(self.action_space.n)
+                    quote = self.orders[0].price * (1 + action)
+
+            # Exploit - choose the action with the highest probability
+            else:
+                if self.type == 'Buyer':
+                    action = torch.argmax(action_prob).item()
+                    quote = self.orders[0].price * (1 - action)
+                elif self.type == 'Seller':
+                    action = torch.argmax(action_prob).item()
+                    quote = self.orders[0].price * (1 + action)
+
+            # Check if it's a bad bid
+            if self.type == 'Buyer' and quote > self.orders[0].price:
+                quote = self.orders[0].price
+            
+            # Check if it's a bad ask
+            elif self.type == 'Seller' and quote < self.orders[0].price:
+                quote = self.orders[0].price
+
+            order = Order(self.tid, order_type, (quote), self.orders[0].qty, time, lob['QID'])
+
+            
+
+        return order
+    
+
+    def update(
+        self, observations: List[np.ndarray], actions: List[int], rewards: List[float],
+        ) -> Dict[str, float]:
+        # Initialise loss and returns
+        p_loss = 0
+        G = 0
+        traj_length = len(observations)
+
+        # Compute action probabilities using the current policy
+        action_probabilities = self.policy(torch.tensor(observations, dtype=torch.float32))
+
+        # Loop backwards in the episode
+        for t in range(traj_length - 2, -1, -1):
+            G = self.gamma * G + rewards[t+1]
+            action_prob = action_probabilities[t, actions[t]]   # Probability of the action at time step t
+            p_loss = p_loss - G * torch.log(action_prob)   # Minimise loss function
+
+        p_loss = p_loss/traj_length   # Normalise policy loss
+
+        # Backpropogate and perform optimisation step
+        self.policy_optim.zero_grad()
+        p_loss.backward()
+        self.policy_optim.step()
+
+        return {"p_loss": float(p_loss)}
 
 
 
@@ -2215,6 +2319,10 @@ def populate_market(traders_spec, traders, shuffle, verbose):
         elif robottype == 'RL':
             return RLAgent('RL', name, balance, parameters, time0, 
                            action_space=[0.03, 0.06, 0.09, 0.12, 0.15], 
+                           obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
+        elif robottype == 'REINFORCE':
+            return Reinforce('REINFORCE', name, balance, parameters, time0, 
+                           action_space=np.linspace(0.05, 1.0, 20), learning_rate=0.01,
                            obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
@@ -2391,7 +2499,6 @@ def customer_orders(time, last_update, traders, trader_stats, os, pending, verbo
         pmax = sysmax_check(offset_max + max(sched[0][0], sched[0][1]))
         prange = pmax - pmin
         stepsize = prange / (n - 1)
-        # stepsize = prange / (n)
         halfstep = round(stepsize / 2.0)
 
         if mode == 'fixed':
@@ -2628,15 +2735,15 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     traders = {}
     trader_stats = populate_market(trader_spec, traders, True, populate_verbose)
 
-    # Find the tid of the RL agent
-    rl_trader_tid = None
-    for tid, trader in traders.items():
-        if trader.ttype == 'RL':
-            rl_trader_tid = tid
-            break
+    # # Find the tid of the RL agent
+    # rl_trader_tid = None
+    # for tid, trader in traders.items():
+    #     if trader.ttype == 'RL':
+    #         rl_trader_tid = tid
+    #         break
 
-    if rl_trader_tid is None:
-        raise ValueError("RL agent not found in the traders")
+    # if rl_trader_tid is None:
+    #     raise ValueError("RL agent not found in the traders")
 
     # timestep set so that can process all traders in one second
     # NB minimum interarrival time of customer orders may be much less than this!!
@@ -2838,8 +2945,8 @@ if __name__ == "__main__":
 
         # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
         # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
-        sellers_spec = [('RL', 2, {'epsilon': 1.0})]
-        buyers_spec = [('ZIC', 20)]
+        sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': 1.0})]
+        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
