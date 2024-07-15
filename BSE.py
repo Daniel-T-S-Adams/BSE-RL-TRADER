@@ -63,11 +63,11 @@ from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
 
-import torch
-from torch import nn, Tensor
-from torch.optim import Adam
+# import torch
+# from torch import nn, Tensor
+# from torch.optim import Adam
 
-from neural_network import Network
+# from neural_network import Network
 
 
 # a bunch of system constants (globals)
@@ -1899,9 +1899,9 @@ class RLAgent(Trader):
         # Check if they gave different parameters
         if type(params) is dict:
             if 'q_table_buyer' in params and self.type == 'Buyer':
-                self.q_table = params['q_table_buyer']
+                self.q_table = self.load_q_table(params['q_table_buyer'])
             elif 'q_table_seller' in params and self.type == 'Seller':
-                self.q_table = params['q_table_seller']
+                self.q_table = self.load_q_table(params['q_table_seller'])
             if 'epsilon' in params:
                 self.epsilon = params['epsilon']
         
@@ -2056,7 +2056,6 @@ class RLAgent(Trader):
         else:
             order_type = self.orders[0].otype
             # return the best action following an epsilon-greedy policy
-            # obs = self.current_obs
             obs = tuple(get_discrete_state(self.type, lob, time, self.orders[0].price))
             # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
@@ -2235,10 +2234,10 @@ class Reinforce(RLAgent):
 
 
 
-# ########################---trader-types have all been defined now--################
+########################---trader-types have all been defined now--################
 
 
-# #########################---Below lies the experiment/test-rig---##################
+#########################---Below lies the experiment/test-rig---##################
 
 
 # trade_stats()
@@ -2320,10 +2319,10 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             return RLAgent('RL', name, balance, parameters, time0, 
                            action_space=[0.03, 0.06, 0.09, 0.12, 0.15], 
                            obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
-        elif robottype == 'REINFORCE':
-            return Reinforce('REINFORCE', name, balance, parameters, time0, 
-                           action_space=np.linspace(0.05, 1.0, 20), learning_rate=0.01,
-                           obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
+        # elif robottype == 'REINFORCE':
+        #     return Reinforce('REINFORCE', name, balance, parameters, time0, 
+        #                    action_space=np.linspace(0.05, 1.0, 20), learning_rate=0.01,
+        #                    obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 

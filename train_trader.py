@@ -21,7 +21,7 @@ def load_episode_data(file: str) -> Tuple[List, List, List]:
         reader = csv.reader(f)
         next(reader)  # Skip the header
         for row in reader:
-            obs_str = row[0].strip('[]').split()[1:]
+            obs_str = row[0].strip('()').split(", ")[1:]
             obs_list.append(np.array([float(x.strip("'")) for x in obs_str]))        # Convert the string values to floats
             action_list.append((float(row[1])))
             reward_list.append(float(row[2]))
@@ -29,7 +29,7 @@ def load_episode_data(file: str) -> Tuple[List, List, List]:
     return obs_list, action_list, reward_list
 
 
-def learn(obs: List[int], actions: List[int], rewards: List[float], type, episode) -> Dict:
+def learn(obs: List[int], actions: List[int], rewards: List[float], type) -> Dict:
     # Load the current q_table from the CSV file
     try:
         if type == 'Buyer':
@@ -69,7 +69,7 @@ def learn(obs: List[int], actions: List[int], rewards: List[float], type, episod
         state_action_pair = (tuple(obs[t]), actions[t])
         sa_counts[state_action_pair] += 1
         q_table[state_action_pair] += (G[t] - q_table[state_action_pair]) / sa_counts[state_action_pair]
-
+    
     # Save the updated q_table back to the CSV file
     if type == 'Buyer':
         dump_q_table(q_table, 'q_table_buyer.csv')
@@ -142,9 +142,10 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
             file = 'episode_seller.csv'
             obs_list, action_list, reward_list = load_episode_data(file)
             # Learn from the experience with the MC update
-            q_table_seller = learn(obs_list, action_list, reward_list, 'Seller', episode)
-        except:
-            pass
+            q_table_seller = learn(obs_list, action_list, reward_list, 'Seller')
+        except Exception as e:
+            print(f"Error processing seller episode {episode}: {e}")
+            q_table_seller = None
         
         # Perform evaluation every `eval_freq` episodes
         if episode % eval_freq == 0:
@@ -160,13 +161,14 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
                 q_table='q_table_seller.csv', file='episode_seller.csv'
                 )
             tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN SELLER {mean_return_seller}")
-
+    
+    return q_table_seller
 
 
 CONFIG = {
-    "total_eps": 100,
-    "eval_freq": 10,
-    "eval_episodes": 10,
+    "total_eps": 100000,
+    "eval_freq": 10000,
+    "eval_episodes": 1000,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
