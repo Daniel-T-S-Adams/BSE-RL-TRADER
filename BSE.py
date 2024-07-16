@@ -63,16 +63,16 @@ from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
 
-# import torch
-# from torch import nn, Tensor
-# from torch.optim import Adam
+import torch
+from torch import nn, Tensor
+from torch.optim import Adam
 
-# from neural_network import Network
+from neural_network import Network
 
 
 # a bunch of system constants (globals)
 bse_sys_minprice = 1                    # minimum price in the system, in cents/pennies
-bse_sys_maxprice = 9                    # maximum price in the system, in cents/pennies
+bse_sys_maxprice = 500                    # maximum price in the system, in cents/pennies
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
 
@@ -2132,7 +2132,6 @@ class RLAgent(Trader):
 
                 self.old_balance = self.balance
         
-        # return q_table
         return None
     
 
@@ -2156,12 +2155,47 @@ class Reinforce(RLAgent):
         state_size = np.prod(obs_space.shape)
         action_size = len(action_space)
         self.learning_rate = learning_rate
+        self.max_length = 0
 
         self.policy = Network(
-            dims=(state_size, 32, action_size), output_activation=nn.Softmax(dim=-1)
+            dims=(state_size, action_size), output_activation=nn.Softmax(dim=-1)
             )
         
         self.policy_optim = Adam(self.policy.parameters(), lr=learning_rate, eps=1e-3)
+
+
+    def preprocess_lob(self, lob: Dict) -> np.ndarray:
+        """
+        Converts the LOB dictionary into a 3D numpy array with shape 
+        (2, max_length, 2). The first dimension corresponds to bids and 
+        asks, and the last dimension corresponds to price and quantity.
+        """
+        bids = lob['bids']['lob']
+        asks = lob['asks']['lob']
+
+        # Adjust the max_length if we encounter larger lists
+        # self.max_length = max(self.max_length, len(bids), len(asks))
+        self.max_length = 25
+
+        # Initialize a 3D numpy array for bids and asks
+        lob_array = np.zeros((2, self.max_length, 2), dtype=np.float32)
+
+        # Fill the bids section of the array
+        padded_bids = self.pad_lob(bids, self.max_length)
+        lob_array[0] = np.array(padded_bids, dtype=np.float32)
+
+        # Fill the asks section of the array
+        padded_asks = self.pad_lob(asks, self.max_length)
+        lob_array[1] = np.array(padded_asks, dtype=np.float32)
+
+        return lob_array
+
+    def pad_lob(self, lob_list: List[List[int]], max_length: int) -> List[List[int]]:
+        """
+        Pads the LOB list with zeros to ensure it has the same length.
+        """
+        padded_lob = lob_list + [[0.0, 0.0]] * (max_length - len(lob_list))
+        return padded_lob[:max_length]
 
 
     def getorder(self, time, countdown, lob):
@@ -2169,26 +2203,31 @@ class Reinforce(RLAgent):
             order = None
 
         else:
-            obs = self.current_obs
+            order_type = self.orders[0].otype
+
+            # Extract relevant features from the lob
+            obs = self.preprocess_lob(lob)
             state = torch.tensor(obs, dtype=torch.float32).flatten()
             action_prob = self.policy(state)
 
             # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
                 if self.type == 'Buyer':
-                    action = np.random.choice(self.action_space.n)
+                    action = np.random.choice(self.action_space)
                     quote = self.orders[0].price * (1 - action)
                 elif self.type == 'Seller':
-                    action = np.random.choice(self.action_space.n)
+                    action = np.random.choice(self.action_space)
                     quote = self.orders[0].price * (1 + action)
 
             # Exploit - choose the action with the highest probability
             else:
                 if self.type == 'Buyer':
-                    action = torch.argmax(action_prob).item()
+                    action_index = torch.argmax(action_prob).item()
+                    action = self.action_space[action_index]
                     quote = self.orders[0].price * (1 - action)
                 elif self.type == 'Seller':
-                    action = torch.argmax(action_prob).item()
+                    action_index = torch.argmax(action_prob).item()
+                    action = self.action_space[action_index]
                     quote = self.orders[0].price * (1 + action)
 
             # Check if it's a bad bid
@@ -2201,7 +2240,17 @@ class Reinforce(RLAgent):
 
             order = Order(self.tid, order_type, (quote), self.orders[0].qty, time, lob['QID'])
 
+            if self.type == 'Buyer':
+                file = 'episode_buyer.csv'
+            elif self.type == 'Seller':
+                file = 'episode_seller.csv'
             
+            # Write the current state, action and reward
+            reward = 0.0
+            with open(file, 'a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([state, action, reward])
+        
 
         return order
     
@@ -2319,10 +2368,10 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             return RLAgent('RL', name, balance, parameters, time0, 
                            action_space=[0.03, 0.06, 0.09, 0.12, 0.15], 
                            obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
-        # elif robottype == 'REINFORCE':
-        #     return Reinforce('REINFORCE', name, balance, parameters, time0, 
-        #                    action_space=np.linspace(0.05, 1.0, 20), learning_rate=0.01,
-        #                    obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
+        elif robottype == 'REINFORCE':
+            return Reinforce('REINFORCE', name, balance, parameters, time0, 
+                           action_space=np.linspace(0.05, 1.0, 20), learning_rate=0.01,
+                           obs_space=spaces.Box(low=0, high=np.inf, shape=(2, 25, 2), dtype=np.float32))
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 
@@ -2896,12 +2945,12 @@ if __name__ == "__main__":
     #                     {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':'fixed'}
     #                   ]
 
-    # range1 = (50, 150)
-    range1 = (4, 6)
+    range1 = (50, 150)
+    # range1 = (4, 6)
     supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-    # range2 = (50, 150)
-    range2 = (4, 6)
+    range2 = (50, 150)
+    # range2 = (4, 6)
     demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
     # new customer orders arrive at each trader approx once every order_interval seconds
@@ -2944,7 +2993,7 @@ if __name__ == "__main__":
 
         # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
         # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
-        sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'epsilon': 1.0})]
+        sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('REINFORCE', 1)]
         buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
