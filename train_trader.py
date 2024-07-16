@@ -166,9 +166,9 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
 
 CONFIG = {
-    "total_eps": 100000,
-    "eval_freq": 10000,
-    "eval_episodes": 1000,
+    "total_eps": 100,
+    "eval_freq": 10,
+    "eval_episodes": 10,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -200,8 +200,8 @@ verbose = False
 
 
 # Training the RL agent with evaluation
-q_table = train(total_eps=CONFIG['total_eps'], 
-                market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
-                eval_freq=CONFIG['eval_freq'],
-                epsilon=CONFIG['epsilon'])
+# q_table = train(total_eps=CONFIG['total_eps'], 
+#                 market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
+#                 eval_freq=CONFIG['eval_freq'],
+#                 epsilon=CONFIG['epsilon'])
 

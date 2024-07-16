@@ -4,6 +4,58 @@ from torch import nn, Tensor
 import torch.optim as optim
 from typing import Iterable
 
+state = torch.tensor([[[ 20.,   2.],
+         [ 45.,   1.],
+         [ 55.,   1.],
+         [ 71.,   1.],
+         [ 79.,   1.],
+         [ 80.,   1.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.]],
+
+        [[105.,   1.],
+         [115.,   1.],
+         [116.,   1.],
+         [220.,   1.],
+         [235.,   1.],
+         [294.,   1.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.],
+         [  0.,   0.]]], dtype=torch.float32).flatten()
+
 class Network(nn.Module):
     """
     A fully connected neural network class with 
@@ -64,22 +116,23 @@ class Network(nn.Module):
         return self.network(x)
     
 
-# Example usage
-state_dim = 10  # Example state space size
-action_dim = 4  # Example action space size (number of possible actions)
-hidden_layers = [128, 64]  # Example hidden layers
+# # Example usage
+# state_dim = 100  # Example state space size
+# action_dim = 20  # Example action space size (number of possible actions)
+# hidden_layers = [128, 64]  # Example hidden layers
 
-# Create an instance of the Network
-policy_net = Network([state_dim] + hidden_layers + [action_dim], nn.Softmax(dim=-1))
+# # Create an instance of the Network
+# policy_net = Network([state_dim] + [action_dim], nn.Softmax(dim=-1))
 
-# Generate a random state (for example purposes)
-state = torch.FloatTensor([1.0, 0.5, -0.1, 0.0, 1.2, -0.7, 0.3, 0.8, -0.5, 0.6])
+# # Generate a random state (for example purposes)
+# state = torch.FloatTensor([1.0, 0.5, -0.1, 0.0, 1.2, -0.7, 0.3, 0.8, -0.5, 0.6])
 
-# Get the action probabilities from the policy network
-action_probs = policy_net(state)
+# # Get the action probabilities from the policy network
+# action_probs = policy_net(state)
 
-# Sample an action based on the probabilities
-action = torch.multinomial(action_probs, 1).item()
+# # Sample an action based on the probabilities
+# action = torch.multinomial(action_probs, 1).item()
 
-print("Action probabilities:", action_probs)
-print("Selected action:", action)
+# print("Action probabilities:", action_probs)
+# print("Selected action:", action)
+

@@ -2207,6 +2207,7 @@ class Reinforce(RLAgent):
 
             # Extract relevant features from the lob
             obs = self.preprocess_lob(lob)
+            print(obs)
             state = torch.tensor(obs, dtype=torch.float32).flatten()
             action_prob = self.policy(state)
 
@@ -2249,7 +2250,7 @@ class Reinforce(RLAgent):
             reward = 0.0
             with open(file, 'a', newline='') as f:
                 writer = csv.writer(f)
-                writer.writerow([state, action, reward])
+                writer.writerow([obs, action, reward])
         
 
         return order
