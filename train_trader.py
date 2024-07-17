@@ -79,8 +79,6 @@ def learn(obs: List[int], actions: List[int], rewards: List[float], type) -> Dic
     return q_table
 
 
-# Should change epsilon to 0.0 here so the agent doesn't explore
-# but rather just tries to maximise rewards
 def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file) -> float:
     total_return = 0.0
     mean_return_list = []

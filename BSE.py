@@ -1905,8 +1905,8 @@ class RLAgent(Trader):
             if 'epsilon' in params:
                 self.epsilon = params['epsilon']
         
-        # self.num_actions = spaces.flatdim(action_space)
-        self.num_actions = len(self.action_space)
+        self.num_actions = spaces.flatdim(action_space)
+        # self.num_actions = len(self.action_space)
         self.sa_counts = {}
         self.current_obs = None
         self.old_balance = 0
@@ -2152,13 +2152,15 @@ class Reinforce(RLAgent):
     ):
         
         super().__init__(ttype, tid, balance, params, time, action_space, obs_space, gamma, epsilon)
-        state_size = np.prod(obs_space.shape)
-        action_size = len(action_space)
+        self.state_size = np.prod(self.obs_space.shape)
+        self.action_size = self.action_space.n
         self.learning_rate = learning_rate
+
+        self.profit_stepsize = 1/(self.action_size - 1)
         self.max_length = 0
 
         self.policy = Network(
-            dims=(state_size, action_size), output_activation=nn.Softmax(dim=-1)
+            dims=(self.state_size, self.action_size), output_activation=nn.Softmax(dim=-1)
             )
         
         self.policy_optim = Adam(self.policy.parameters(), lr=learning_rate, eps=1e-3)
@@ -2175,7 +2177,7 @@ class Reinforce(RLAgent):
 
         # Adjust the max_length if we encounter larger lists
         # self.max_length = max(self.max_length, len(bids), len(asks))
-        self.max_length = 25
+        self.max_length = 10
 
         # Initialize a 3D numpy array for bids and asks
         lob_array = np.zeros((2, self.max_length, 2), dtype=np.float32)
@@ -2207,29 +2209,26 @@ class Reinforce(RLAgent):
 
             # Extract relevant features from the lob
             obs = self.preprocess_lob(lob)
-            print(obs)
             state = torch.tensor(obs, dtype=torch.float32).flatten()
             action_prob = self.policy(state)
 
             # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
                 if self.type == 'Buyer':
-                    action = np.random.choice(self.action_space)
-                    quote = self.orders[0].price * (1 - action)
+                    action = self.action_space.sample()
+                    quote = self.orders[0].price * (1 - self.profit_stepsize*action)
                 elif self.type == 'Seller':
-                    action = np.random.choice(self.action_space)
-                    quote = self.orders[0].price * (1 + action)
+                    action = self.action_space.sample()
+                    quote = self.orders[0].price * (1 + self.profit_stepsize*action)
 
             # Exploit - choose the action with the highest probability
             else:
                 if self.type == 'Buyer':
-                    action_index = torch.argmax(action_prob).item()
-                    action = self.action_space[action_index]
-                    quote = self.orders[0].price * (1 - action)
+                    action = torch.argmax(action_prob).item()
+                    quote = self.orders[0].price * (1 - self.profit_stepsize*action)
                 elif self.type == 'Seller':
-                    action_index = torch.argmax(action_prob).item()
-                    action = self.action_space[action_index]
-                    quote = self.orders[0].price * (1 + action)
+                    action = torch.argmax(action_prob).item()
+                    quote = self.orders[0].price * (1 + self.profit_stepsize*action)
 
             # Check if it's a bad bid
             if self.type == 'Buyer' and quote > self.orders[0].price:
@@ -2371,8 +2370,8 @@ def populate_market(traders_spec, traders, shuffle, verbose):
                            obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
         elif robottype == 'REINFORCE':
             return Reinforce('REINFORCE', name, balance, parameters, time0, 
-                           action_space=np.linspace(0.05, 1.0, 20), learning_rate=0.01,
-                           obs_space=spaces.Box(low=0, high=np.inf, shape=(2, 25, 2), dtype=np.float32))
+                           action_space=spaces.Discrete(5), learning_rate=0.01,
+                           obs_space=spaces.Box(low=0, high=np.inf, shape=(2, 10, 2), dtype=np.float32))
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 
@@ -2994,8 +2993,8 @@ if __name__ == "__main__":
 
         # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
         # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
-        sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('REINFORCE', 1)]
-        buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
+        sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1), ('REINFORCE', 1)]
+        buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
