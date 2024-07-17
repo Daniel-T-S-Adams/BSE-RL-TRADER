@@ -70,6 +70,7 @@ def update(
         # Backpropogate and perform optimisation step
         policy_optim.zero_grad()
         p_loss.backward()
+        torch.nn.utils.clip_grad_norm_(policy.parameters(), max_norm=1.0)       # Gradient clipping
         policy_optim.step()
         
         return {"p_loss": float(p_loss)}
@@ -81,7 +82,7 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
     for episode in range(1, total_eps + 1):
         # Run a market session to generate the episode data
-        # market_session(*market_params)
+        market_session(*market_params)
 
         try:
             file = 'episode_seller.csv'
@@ -94,19 +95,54 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
             for key, value in update_results.items():
                 stats[key].append(value)
 
-            # Evaluate the policy at specified intervals
-            if episode % eval_freq == 0:
-                print(f"Episode {episode}: {update_results}")
-
         except Exception as e:
             print(f"Error processing seller episode {episode}: {e}")
 
+        # Evaluate the policy at specified intervals
+        if episode % eval_freq == 0:
+            print(f"Episode {episode}: {update_results}")
+            
+            mean_return_seller, mean_return_list = evaluate(
+            episodes=CONFIG['eval_episodes'], market_params=market_params, 
+            policy=policy, file='episode_seller.csv')
+
+            tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN SELLER {mean_return_seller}")
+
     return stats
+
+
+def evaluate(episodes: int, market_params: tuple, policy, file) -> float:
+    total_return = 0.0
+    mean_return_list = []
+
+    updated_market_params = list(market_params)    
+    updated_market_params[3]['sellers'][4][2]['policy'] = policy
+    updated_market_params[3]['sellers'][4][2]['epsilon'] = 0.0              # No exploring
+
+    for _ in range(episodes):
+        balance = 0.0
+        market_session(*market_params)
+
+        # Read the episode file
+        with open(file, 'r') as f:
+            reader = csv.reader(f)
+            next(reader)  # Skip the header
+            for row in reader:
+                reward = float(row[2])
+                balance += reward
+
+        # Profit made by the RL agent at the end of the trading window
+        total_return += balance
+    
+    mean_return = total_return / episodes
+    mean_return_list.append(mean_return)
+
+    return mean_return, mean_return_list
      
 
 
 policy = Network(
-     dims=(40, 5), output_activation=nn.Softmax(dim=-1)
+     dims=(40, 32, 21), output_activation=nn.Softmax(dim=-1)
      )
         
 policy_optim = Adam(policy.parameters(), lr=0.01, eps=1e-3)
@@ -125,7 +161,7 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 60.0
 
-sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1), ('REINFORCE', 1)]
+sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1), ('REINFORCE', 1, {'epsilon':1.0, 'policy': policy})]
 buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}

@@ -2165,6 +2165,11 @@ class Reinforce(RLAgent):
         
         self.policy_optim = Adam(self.policy.parameters(), lr=learning_rate, eps=1e-3)
 
+        # Check if they gave different parameters
+        if type(params) is dict:
+            if 'policy' in params:
+                self.policy = params['policy']
+
 
     def preprocess_lob(self, lob: Dict) -> np.ndarray:
         """
@@ -2370,7 +2375,7 @@ def populate_market(traders_spec, traders, shuffle, verbose):
                            obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
         elif robottype == 'REINFORCE':
             return Reinforce('REINFORCE', name, balance, parameters, time0, 
-                           action_space=spaces.Discrete(5), learning_rate=0.01,
+                           action_space=spaces.Discrete(21), learning_rate=0.01,
                            obs_space=spaces.Box(low=0, high=np.inf, shape=(2, 10, 2), dtype=np.float32))
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
@@ -2427,6 +2432,10 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             elif 'q_table_seller' in trader_params:
                 q_table_seller = RLAgent.load_q_table(trader_params['q_table_seller'])
                 parameters['q_table_seller'] = q_table_seller
+
+        if ttype == 'REINFORCE':
+            if 'policy' in trader_params:
+                parameters = {'policy': trader_params['policy']}
 
         return parameters
 
@@ -2993,7 +3002,7 @@ if __name__ == "__main__":
 
         # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
         # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
-        sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1), ('REINFORCE', 1)]
+        sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1), ('REINFORCE', 1, {})]
         buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
