@@ -84,16 +84,16 @@ def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file) ->
     mean_return_list = []
 
     updated_market_params = list(market_params)    
-    if file == 'q_table_buyer.csv':
-        updated_market_params[3]['buyers'][0][2]['q_table_buyer'] = 'q_table_buyer.csv'
-        updated_market_params[3]['buyers'][0][2]['epsilon'] = 0.0                           # No exploring
-    elif file == 'q_table_seller.csv':
-        updated_market_params[3]['sellers'][0][2]['q_table_seller'] = 'q_table_seller.csv'
-        updated_market_params[3]['sellers'][0][2]['epsilon'] = 0.0                          # No exploring
+    # if file == 'q_table_buyer.csv':
+    #     updated_market_params[3]['buyers'][0][2]['q_table_buyer'] = 'q_table_buyer.csv'
+    #     updated_market_params[3]['buyers'][0][2]['epsilon'] = 0.0                           # No exploring
+    # elif file == 'q_table_seller.csv':
+    updated_market_params[3]['sellers'][1][2]['q_table_seller'] = 'q_table_seller.csv'
+    updated_market_params[3]['sellers'][1][2]['epsilon'] = 0.0                          # No exploring
 
     for _ in range(episodes):
         balance = 0.0
-        market_session(*market_params)
+        market_session(*updated_market_params)
 
         # Read the episode file
         with open(file, 'r') as f:
@@ -142,8 +142,10 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
             # Learn from the experience with the MC update
             q_table_seller = learn(obs_list, action_list, reward_list, 'Seller')
         except Exception as e:
-            print(f"Error processing seller episode {episode}: {e}")
-            q_table_seller = None
+            # print(f"Error processing seller episode {episode}: {e}")
+            # q_table_seller = None
+            pass
+
         
         # Perform evaluation every `eval_freq` episodes
         if episode % eval_freq == 0:
@@ -164,9 +166,9 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
 
 CONFIG = {
-    "total_eps": 100,
-    "eval_freq": 10,
-    "eval_episodes": 10,
+    "total_eps": 100000,
+    "eval_freq": 10000,
+    "eval_episodes": 10000,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -176,8 +178,8 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 30.0
 
-sellers_spec = [('RL', 2, {'epsilon': 1.0})]
-buyers_spec = [('ZIC', 20)]
+sellers_spec = [('ZIC', 9), ('RL', 1, {'epsilon': 1.0})]
+buyers_spec = [('ZIC', 10)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
@@ -198,8 +200,8 @@ verbose = False
 
 
 # Training the RL agent with evaluation
-# q_table = train(total_eps=CONFIG['total_eps'], 
-#                 market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
-#                 eval_freq=CONFIG['eval_freq'],
-#                 epsilon=CONFIG['epsilon'])
+q_table = train(total_eps=CONFIG['total_eps'], 
+                market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
+                eval_freq=CONFIG['eval_freq'],
+                epsilon=CONFIG['epsilon'])
 
