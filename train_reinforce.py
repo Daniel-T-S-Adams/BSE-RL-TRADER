@@ -98,6 +98,7 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
         except Exception as e:
             print(f"Error processing seller episode {episode}: {e}")
 
+
         # Evaluate the policy at specified intervals
         if episode % eval_freq == 0:
             print(f"Episode {episode}: {update_results}")
@@ -116,12 +117,12 @@ def evaluate(episodes: int, market_params: tuple, policy, file) -> float:
     mean_return_list = []
 
     updated_market_params = list(market_params)    
-    updated_market_params[3]['sellers'][4][2]['policy'] = policy
-    updated_market_params[3]['sellers'][4][2]['epsilon'] = 0.0              # No exploring
+    updated_market_params[3]['sellers'][1][2]['policy'] = policy
+    updated_market_params[3]['sellers'][1][2]['epsilon'] = 0.0         # No exploring
 
     for _ in range(episodes):
         balance = 0.0
-        market_session(*market_params)
+        market_session(*updated_market_params)
 
         # Read the episode file
         with open(file, 'r') as f:
@@ -142,16 +143,16 @@ def evaluate(episodes: int, market_params: tuple, policy, file) -> float:
 
 
 policy = Network(
-     dims=(40, 32, 21), output_activation=nn.Softmax(dim=-1)
+     dims=(40, 32, 32, 21), output_activation=nn.Softmax(dim=-1)
      )
         
-policy_optim = Adam(policy.parameters(), lr=0.01, eps=1e-3)
+policy_optim = Adam(policy.parameters(), lr=1e-4, eps=1e-3)
 
 
 CONFIG = {
-    "total_eps": 1000,
-    "eval_freq": 100,
-    "eval_episodes": 100,
+    "total_eps": 5,
+    "eval_freq": 5,
+    "eval_episodes": 1,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -161,8 +162,8 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 60.0
 
-sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1), ('REINFORCE', 1, {'epsilon':1.0, 'policy': policy})]
-buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
+sellers_spec = [('GVWY', 9), ('REINFORCE', 1, {'epsilon': 1.0, 'policy': policy})]
+buyers_spec = [('GVWY', 10)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
@@ -187,3 +188,9 @@ training_stats = train(CONFIG['total_eps'],
                        eval_freq=CONFIG['eval_freq'],
                        epsilon=CONFIG['epsilon']
                        )
+
+loss = training_stats['p_loss']
+plt.plot(loss)
+plt.title("Policy Loss vs Episode")
+plt.xlabel("Episode number")
+plt.show()

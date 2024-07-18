@@ -72,7 +72,7 @@ from neural_network import Network
 
 # a bunch of system constants (globals)
 bse_sys_minprice = 1                    # minimum price in the system, in cents/pennies
-bse_sys_maxprice = 9                    # maximum price in the system, in cents/pennies
+bse_sys_maxprice = 200                    # maximum price in the system, in cents/pennies
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
 
@@ -2180,7 +2180,7 @@ class Reinforce(RLAgent):
             if 'epsilon' in params:
                 self.epsilon = params['epsilon']
 
-        
+
     def preprocess_lob(self, lob: Dict) -> np.ndarray:
         """
         Converts the LOB dictionary into a 3D numpy array with shape 
@@ -2444,8 +2444,10 @@ def populate_market(traders_spec, traders, shuffle, verbose):
                 parameters['q_table_seller'] = q_table_seller
 
         if ttype == 'REINFORCE':
+            epsilon = trader_params.get('epsilon', 0.9)
+            parameters = {'epsilon': epsilon}
             if 'policy' in trader_params:
-                parameters = {'policy': trader_params['policy']}
+                parameters['policy'] = trader_params['policy']
 
         return parameters
 
@@ -2927,148 +2929,148 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
 
 #############################
 
-# # Below here is where we set up and run a whole series of experiments
+# Below here is where we set up and run a whole series of experiments
 
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
 
-#     # set up common parameters for all market sessions
-#     # 1000 days is good, but 3*365=1095, so may as well go for three years.
-#     n_days = 10
-#     start_time = 0.0
-#     # end_time = 60.0 * 60.0 * 24 * n_days
-#     end_time = 100.0
-#     duration = end_time - start_time
+    # set up common parameters for all market sessions
+    # 1000 days is good, but 3*365=1095, so may as well go for three years.
+    n_days = 10
+    start_time = 0.0
+    # end_time = 60.0 * 60.0 * 24 * n_days
+    end_time = 100.0
+    duration = end_time - start_time
 
-#     # schedule_offsetfn returns time-dependent offset, to be added to schedule prices
-#     def schedule_offsetfn(t):
-#         pi2 = math.pi * 2
-#         c = math.pi * 3000
-#         wavelength = t / c
-#         gradient = 100 * t / (c / pi2)
-#         amplitude = 100 * t / (c / pi2)
-#         offset = gradient + amplitude * math.sin(wavelength * t)
-#         return int(round(offset, 0))
+    # schedule_offsetfn returns time-dependent offset, to be added to schedule prices
+    def schedule_offsetfn(t):
+        pi2 = math.pi * 2
+        c = math.pi * 3000
+        wavelength = t / c
+        gradient = 100 * t / (c / pi2)
+        amplitude = 100 * t / (c / pi2)
+        offset = gradient + amplitude * math.sin(wavelength * t)
+        return int(round(offset, 0))
 
-#     # Here is an example of how to use the offset function
-#     #
-#     # range1 = (10, 190, schedule_offsetfn)
-#     # range2 = (200, 300, schedule_offsetfn)
+    # Here is an example of how to use the offset function
+    #
+    # range1 = (10, 190, schedule_offsetfn)
+    # range2 = (200, 300, schedule_offsetfn)
 
-#     # Here is an example of how to switch from range1 to range2 and then back to range1,
-#     # introducing two "market shocks"
-#     # -- here the timings of the shocks are at 1/3 and 2/3 into the duration of the session.
-#     #
-#     # supply_schedule = [ {'from':start_time, 'to':duration/3, 'ranges':[range1], 'stepmode':'fixed'},
-#     #                     {'from':duration/3, 'to':2*duration/3, 'ranges':[range2], 'stepmode':'fixed'},
-#     #                     {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':'fixed'}
-#     #                   ]
+    # Here is an example of how to switch from range1 to range2 and then back to range1,
+    # introducing two "market shocks"
+    # -- here the timings of the shocks are at 1/3 and 2/3 into the duration of the session.
+    #
+    # supply_schedule = [ {'from':start_time, 'to':duration/3, 'ranges':[range1], 'stepmode':'fixed'},
+    #                     {'from':duration/3, 'to':2*duration/3, 'ranges':[range2], 'stepmode':'fixed'},
+    #                     {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':'fixed'}
+    #                   ]
 
-#     range1 = (50, 150)
-#     # range1 = (4, 6)
-#     supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
+    range1 = (50, 150)
+    # range1 = (4, 6)
+    supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-#     range2 = (50, 150)
-#     # range2 = (4, 6)
-#     demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
+    range2 = (50, 150)
+    # range2 = (4, 6)
+    demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
-#     # new customer orders arrive at each trader approx once every order_interval seconds
-#     order_interval = 30
+    # new customer orders arrive at each trader approx once every order_interval seconds
+    order_interval = 30
 
-#     order_sched = {'sup': supply_schedule, 'dem': demand_schedule,
-#                    'interval': order_interval, 'timemode': 'drip-poisson'}
+    order_sched = {'sup': supply_schedule, 'dem': demand_schedule,
+                   'interval': order_interval, 'timemode': 'drip-poisson'}
 
-#     # Use 'periodic' if you want the traders' assignments to all arrive simultaneously & periodically
-#     #               'order_interval': 30, 'timemode': 'periodic'}
+    # Use 'periodic' if you want the traders' assignments to all arrive simultaneously & periodically
+    #               'order_interval': 30, 'timemode': 'periodic'}
 
-#     # buyers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10)]
-#     # sellers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10)]
+    # buyers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10)]
+    # sellers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10)]
 
-#     opponent = 'GVWY'
-#     opp_N = 30
-# #    sellers_spec = [('PRSH', 30),(opponent, opp_N-1)]
-# #    buyers_spec = [(opponent, opp_N)]
+    opponent = 'GVWY'
+    opp_N = 30
+#    sellers_spec = [('PRSH', 30),(opponent, opp_N-1)]
+#    buyers_spec = [(opponent, opp_N)]
 
 
-#     # run a sequence of trials, one session per trial
+    # run a sequence of trials, one session per trial
 
-#     verbose = False
+    verbose = False
 
-#     # n_trials is how many trials (i.e. market sessions) to run in total
-#     n_trials = 1
+    # n_trials is how many trials (i.e. market sessions) to run in total
+    n_trials = 1
 
-#     # n_recorded is how many trials (i.e. market sessions) to write full data-files for
-#     n_trials_recorded = 1
+    # n_recorded is how many trials (i.e. market sessions) to write full data-files for
+    n_trials_recorded = 1
 
-#     trial = 1
+    trial = 1
 
-#     while trial < (n_trials+1):
+    while trial < (n_trials+1):
 
-#         # create unique i.d. string for this trial
-#         trial_id = 'bse_d%03d_i%02d_%04d' % (n_days, order_interval, trial)
+        # create unique i.d. string for this trial
+        trial_id = 'bse_d%03d_i%02d_%04d' % (n_days, order_interval, trial)
 
-#         buyers_spec = [('ZIPSH', 10, {'k': 4})]
-#         sellers_spec = [('ZIPSH', 10, {'k': 4})]
+        buyers_spec = [('ZIPSH', 10, {'k': 4})]
+        sellers_spec = [('ZIPSH', 10, {'k': 4})]
 
-#         # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
-#         # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
-#         sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1), ('REINFORCE', 1, {})]
-#         buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
+        # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
+        # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
+        sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1), ('REINFORCE', 1, {})]
+        buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
 
-#         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
+        traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
-#         if trial < n_trials_recorded:
-#             dump_flags = {'dump_blotters': False, 'dump_lobs': False, 'dump_strats': False,
-#                           'dump_avgbals': False, 'dump_tape': False}
-#         else:
-#             dump_flags = {'dump_blotters': True, 'dump_lobs': True, 'dump_strats': True,
-#                           'dump_avgbals': True, 'dump_tape': True}
+        if trial < n_trials_recorded:
+            dump_flags = {'dump_blotters': False, 'dump_lobs': False, 'dump_strats': False,
+                          'dump_avgbals': False, 'dump_tape': False}
+        else:
+            dump_flags = {'dump_blotters': True, 'dump_lobs': True, 'dump_strats': True,
+                          'dump_avgbals': True, 'dump_tape': True}
 
-#         market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose)
+        market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose)
         
-#         trial = trial + 1
+        trial = trial + 1
 
-#     # run a sequence of trials that exhaustively varies the ratio of four trader types
-#     # NB this has weakness of symmetric proportions on buyers/sellers -- combinatorics of varying that are quite nasty
-#     #
-#     # n_trader_types = 4
-#     # equal_ratio_n = 4
-#     # n_trials_per_ratio = 50
-#     #
-#     # n_traders = n_trader_types * equal_ratio_n
-#     #
-#     # fname = 'balances_%03d.csv' % equal_ratio_n
-#     #
-#     # tdump = open(fname, 'w')
-#     #
-#     # min_n = 1
-#     #
-#     # trialnumber = 1
-#     # trdr_1_n = min_n
-#     # while trdr_1_n <= n_traders:
-#     #     trdr_2_n = min_n
-#     #     while trdr_2_n <= n_traders - trdr_1_n:
-#     #         trdr_3_n = min_n
-#     #         while trdr_3_n <= n_traders - (trdr_1_n + trdr_2_n):
-#     #             trdr_4_n = n_traders - (trdr_1_n + trdr_2_n + trdr_3_n)
-#     #             if trdr_4_n >= min_n:
-#     #                 buyers_spec = [('GVWY', trdr_1_n), ('SHVR', trdr_2_n),
-#     #                                ('ZIC', trdr_3_n), ('ZIP', trdr_4_n)]
-#     #                 sellers_spec = buyers_spec
-#     #                 traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
-#     #                 # print buyers_spec
-#     #                 trial = 1
-#     #                 while trial <= n_trials_per_ratio:
-#     #                     trial_id = 'trial%07d' % trialnumber
-#     #                     market_session(trial_id, start_time, end_time, traders_spec,
-#     #                                    order_sched, tdump, False, True)
-#     #                     tdump.flush()
-#     #                     trial = trial + 1
-#     #                     trialnumber = trialnumber + 1
-#     #             trdr_3_n += 1
-#     #         trdr_2_n += 1
-#     #     trdr_1_n += 1
-#     # tdump.close()
-#     #
-#     # print(trialnumber)
+    # run a sequence of trials that exhaustively varies the ratio of four trader types
+    # NB this has weakness of symmetric proportions on buyers/sellers -- combinatorics of varying that are quite nasty
+    #
+    # n_trader_types = 4
+    # equal_ratio_n = 4
+    # n_trials_per_ratio = 50
+    #
+    # n_traders = n_trader_types * equal_ratio_n
+    #
+    # fname = 'balances_%03d.csv' % equal_ratio_n
+    #
+    # tdump = open(fname, 'w')
+    #
+    # min_n = 1
+    #
+    # trialnumber = 1
+    # trdr_1_n = min_n
+    # while trdr_1_n <= n_traders:
+    #     trdr_2_n = min_n
+    #     while trdr_2_n <= n_traders - trdr_1_n:
+    #         trdr_3_n = min_n
+    #         while trdr_3_n <= n_traders - (trdr_1_n + trdr_2_n):
+    #             trdr_4_n = n_traders - (trdr_1_n + trdr_2_n + trdr_3_n)
+    #             if trdr_4_n >= min_n:
+    #                 buyers_spec = [('GVWY', trdr_1_n), ('SHVR', trdr_2_n),
+    #                                ('ZIC', trdr_3_n), ('ZIP', trdr_4_n)]
+    #                 sellers_spec = buyers_spec
+    #                 traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
+    #                 # print buyers_spec
+    #                 trial = 1
+    #                 while trial <= n_trials_per_ratio:
+    #                     trial_id = 'trial%07d' % trialnumber
+    #                     market_session(trial_id, start_time, end_time, traders_spec,
+    #                                    order_sched, tdump, False, True)
+    #                     tdump.flush()
+    #                     trial = trial + 1
+    #                     trialnumber = trialnumber + 1
+    #             trdr_3_n += 1
+    #         trdr_2_n += 1
+    #     trdr_1_n += 1
+    # tdump.close()
+    #
+    # print(trialnumber)
 
