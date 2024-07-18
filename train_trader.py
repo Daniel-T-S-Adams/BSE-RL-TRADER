@@ -146,6 +146,7 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
             # q_table_seller = None
             pass
 
+        market_params[3]['sellers'][1][2]['q_table_seller'] = 'q_table_seller.csv'
         
         # Perform evaluation every `eval_freq` episodes
         if episode % eval_freq == 0:
@@ -166,8 +167,8 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
 
 CONFIG = {
-    "total_eps": 100000,
-    "eval_freq": 10000,
+    "total_eps": 200000,
+    "eval_freq": 20000,
     "eval_episodes": 10000,
     "gamma": 1.0,
     "epsilon": 1.0,
