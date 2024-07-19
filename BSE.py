@@ -1936,22 +1936,6 @@ class RLAgent(Trader):
         if strat == 'exponential':
             self.epsilon = max(eps_min, eps_decay*self.epsilon)
 
-        
-    # implement epsilon-greedy action selection
-    def act(self, obs: int) -> int:
-        # obs = tuple(obs)
-        if random.uniform(0, 1) < self.epsilon:
-            # Explore - sample a random action
-            action = bse_sys_minprice + self.action_space.sample()
-        else:
-            # Exploit - choose the action with the highest probability
-            action = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
-
-        # # Check if it is a bad bid
-        # if action > self.orders[0].price:
-        #     return self.orders[0].price
-        # Otherwise return sampled action
-        return action
 
     @classmethod
     def load_q_table(self, file_path: str) -> DefaultDict:
@@ -1997,8 +1981,6 @@ class RLAgent(Trader):
             writer.writerow(['State', 'Action', 'Q-Value'])  # Write the header
             for (state, action), q_value in existing_q_table.items():
                 writer.writerow([state, action, q_value])
-                # state_str = ','.join(map(str, state))  # Convert state tuple to string
-                # writer.writerow([f'({state_str})', action, q_value])
 
 
     def learn(self) -> Dict:
@@ -2068,21 +2050,17 @@ class RLAgent(Trader):
             # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
                 if self.type == 'Buyer':
-                    # quote = bse_sys_minprice + self.action_space.sample()
                     profit = random.choice(self.action_space)
                     quote = self.orders[0].price * (1 - profit)
                 elif self.type == 'Seller':
-                    # quote = bse_sys_maxprice - self.action_space.sample()
                     profit = random.choice(self.action_space)
                     quote = self.orders[0].price * (1 + profit)
             # Exploit - choose the action with the highest probability
             else:
                 if self.type == 'Buyer':
-                    # quote = bse_sys_minprice + max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)])
                     profit = max(list(range(self.num_actions)), key = lambda x: self.q_table[(obs, x)])
                     quote = self.orders[0].price * (1 - profit)
                 elif self.type == 'Seller':
-                    # quote = bse_sys_maxprice - max(list(range(self.action_space.n)), key = lambda x: self.q_table[(obs, x)]
                     profit = max(list(range(self.num_actions)), key = lambda x: self.q_table[(obs, x)])
                     quote = self.orders[0].price * (1 + profit)
 
@@ -2798,21 +2776,9 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
     # initialise the exchange
     exchange = Exchange()
 
-    q_table_file = 'q_table.csv'
-
     # create a bunch of traders
     traders = {}
     trader_stats = populate_market(trader_spec, traders, True, populate_verbose)
-
-    # # Find the tid of the RL agent
-    # rl_trader_tid = None
-    # for tid, trader in traders.items():
-    #     if trader.ttype == 'RL':
-    #         rl_trader_tid = tid
-    #         break
-
-    # if rl_trader_tid is None:
-    #     raise ValueError("RL agent not found in the traders")
 
     # timestep set so that can process all traders in one second
     # NB minimum interarrival time of customer orders may be much less than this!!
@@ -2831,14 +2797,6 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
 
     # frames_done is record of what frames we have printed data for thus far
     frames_done = set()
-
-    # num_observations = int(endtime - starttime)
-    # obs_list = []
-    # action_list = np.zeros(num_observations)
-    # reward_list = np.zeros(num_observations)
-
-    # interval = duration / num_observations
-    # next_observation_time = starttime
 
     while time < endtime:
         # how much time left, as a percentage?
@@ -2939,7 +2897,7 @@ if __name__ == "__main__":
     n_days = 10
     start_time = 0.0
     # end_time = 60.0 * 60.0 * 24 * n_days
-    end_time = 100.0
+    end_time = 500.0
     duration = end_time - start_time
 
     # schedule_offsetfn returns time-dependent offset, to be added to schedule prices
