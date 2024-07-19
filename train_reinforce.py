@@ -79,6 +79,7 @@ def update(
 def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> DefaultDict:
     # Dictionary to store training statistics
     stats = defaultdict(list)
+    mean_return_list = []
 
     for episode in range(1, total_eps + 1):
         # Run a market session to generate the episode data
@@ -103,13 +104,13 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
         if episode % eval_freq == 0:
             print(f"Episode {episode}: {update_results}")
             
-            mean_return_seller, mean_return_list = evaluate(
-            episodes=CONFIG['eval_episodes'], market_params=market_params, 
-            policy=policy, file='episode_seller.csv')
-
+            mean_return_seller = evaluate(
+                episodes=CONFIG['eval_episodes'], market_params=market_params, 
+                policy=policy, file='episode_seller.csv')
             tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN SELLER {mean_return_seller}")
+            mean_return_list.append(mean_return_seller)
 
-    return stats
+    return stats, mean_return_list
 
 
 def evaluate(episodes: int, market_params: tuple, policy, file) -> float:
@@ -117,8 +118,8 @@ def evaluate(episodes: int, market_params: tuple, policy, file) -> float:
     mean_return_list = []
 
     updated_market_params = list(market_params)    
-    updated_market_params[3]['sellers'][1][2]['policy'] = policy
-    updated_market_params[3]['sellers'][1][2]['epsilon'] = 0.0         # No exploring
+    updated_market_params[3]['sellers'][4][2]['policy'] = policy
+    updated_market_params[3]['sellers'][4][2]['epsilon'] = 0.0         # No exploring
 
     for _ in range(episodes):
         balance = 0.0
@@ -134,13 +135,10 @@ def evaluate(episodes: int, market_params: tuple, policy, file) -> float:
 
         # Profit made by the RL agent at the end of the trading window
         total_return += balance
-    
-    mean_return = total_return / episodes
-    mean_return_list.append(mean_return)
+        mean_return = total_return / episodes
 
-    return mean_return, mean_return_list
+    return mean_return
      
-
 
 policy = Network(
      dims=(40, 32, 32, 21), output_activation=nn.Softmax(dim=-1)
@@ -150,9 +148,9 @@ policy_optim = Adam(policy.parameters(), lr=1e-4, eps=1e-3)
 
 
 CONFIG = {
-    "total_eps": 5,
-    "eval_freq": 5,
-    "eval_episodes": 1,
+    "total_eps": 100,
+    "eval_freq": 10,
+    "eval_episodes": 10,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -162,8 +160,8 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 60.0
 
-sellers_spec = [('GVWY', 9), ('REINFORCE', 1, {'epsilon': 1.0, 'policy': policy})]
-buyers_spec = [('GVWY', 10)]
+sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('REINFORCE', 1, {'epsilon': 1.0, 'policy': policy})]
+buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
@@ -183,14 +181,22 @@ dump_flags = {'dump_strats': False, 'dump_lobs': False, 'dump_avgbals': False, '
 verbose = False
 
 # Train the agent
-training_stats = train(CONFIG['total_eps'],
-                       market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
-                       eval_freq=CONFIG['eval_freq'],
-                       epsilon=CONFIG['epsilon']
-                       )
+training_stats, eval_returns_list = train(CONFIG['total_eps'],
+                                    market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
+                                    eval_freq=CONFIG['eval_freq'],
+                                    epsilon=CONFIG['epsilon']
+                                    )
 
 loss = training_stats['p_loss']
 plt.plot(loss)
 plt.title("Policy Loss vs Episode")
 plt.xlabel("Episode number")
-plt.show()
+plt.savefig("loss.png")
+# plt.show()
+
+x_ticks = np.arange(CONFIG['eval_freq'], CONFIG['total_eps']+1, CONFIG['eval_freq'])
+plt.plot(x_ticks, eval_returns_list)
+plt.title("Mean returns - REINFORCE")
+plt.xlabel("Episode number")
+plt.savefig("mean_returns.png")
+# plt.show()
