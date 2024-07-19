@@ -13,6 +13,7 @@ from epsilon_scheduling import epsilon_decay
 import torch
 from torch import nn, Tensor
 from torch.optim import Adam
+import torch.nn.functional as F
 
 from neural_network import Network
 
@@ -47,6 +48,7 @@ def update(
         ) -> Dict[str, float]:
         # Initialise loss and returns
         p_loss = 0
+        v_loss = 0
         G = 0
         traj_length = len(observations)
         
@@ -57,23 +59,33 @@ def update(
         obs_tensor = torch.tensor(flattened_observations, dtype=torch.float32)
 
         # Compute action probabilities using the current policy
-        action_probabilities = policy(obs_tensor)
+        action_probabilities = policy_net(obs_tensor)
+        baseline_values = value_net(obs_tensor).squeeze()
         
-        # Loop backwards in the episode
+        # Precompute returns G for every timestep
+        G = [ 0 for n in range(traj_length) ]
+        G[-1] = rewards[-1]
         for t in range(traj_length - 2, -1, -1):
-            G = gamma * G + rewards[t+1]
-            action_prob = action_probabilities[t, int(actions[t])]   # Probability of the action at time step t
-            p_loss = p_loss - G * torch.log(action_prob)   # Minimise loss function
+            G[t] = rewards[t] + gamma * G[t + 1]
 
-        p_loss = p_loss/traj_length   # Normalise policy loss
-        
-        # Backpropogate and perform optimisation step
+        G = torch.tensor(G, dtype=torch.float32)
+        advantage = G - baseline_values
+        p_loss = torch.mean(-advantage * torch.log(action_probabilities[torch.arange(traj_length), actions]))
+        v_loss = F.mse_loss(baseline_values, G)
+
+        # Backpropogate and perform optimisation step for the policy
         policy_optim.zero_grad()
-        p_loss.backward()
-        torch.nn.utils.clip_grad_norm_(policy.parameters(), max_norm=1.0)       # Gradient clipping
+        p_loss.backward(retain_graph=True)
+        torch.nn.utils.clip_grad_norm_(policy_net.parameters(), max_norm=1.0)       # Gradient clipping
         policy_optim.step()
+
+        # Backpropogate and perform optimisation step for the value function
+        value_optim.zero_grad()
+        v_loss.backward()
+        torch.nn.utils.clip_grad_norm_(value_net.parameters(), max_norm=1.0)       # Gradient clipping
+        value_optim.step()
         
-        return {"p_loss": float(p_loss)}
+        return {"p_loss": float(p_loss), "v_loss": float(v_loss)}
 
 
 def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> DefaultDict:
@@ -99,14 +111,13 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
         except Exception as e:
             print(f"Error processing seller episode {episode}: {e}")
 
-
         # Evaluate the policy at specified intervals
         if episode % eval_freq == 0:
             print(f"Episode {episode}: {update_results}")
             
             mean_return_seller = evaluate(
                 episodes=CONFIG['eval_episodes'], market_params=market_params, 
-                policy=policy, file='episode_seller.csv')
+                policy=policy_net, file='episode_seller.csv')
             tqdm.write(f"EVALUATION: EP {episode} - MEAN RETURN SELLER {mean_return_seller}")
             mean_return_list.append(mean_return_seller)
 
@@ -115,7 +126,6 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
 
 def evaluate(episodes: int, market_params: tuple, policy, file) -> float:
     total_return = 0.0
-    mean_return_list = []
 
     updated_market_params = list(market_params)    
     updated_market_params[3]['sellers'][4][2]['policy'] = policy
@@ -140,17 +150,20 @@ def evaluate(episodes: int, market_params: tuple, policy, file) -> float:
     return mean_return
      
 
-policy = Network(
-     dims=(40, 32, 32, 21), output_activation=nn.Softmax(dim=-1)
-     )
+policy_net = Network(
+    dims=(40, 32, 32, 21), output_activation=nn.Softmax(dim=-1)
+    )
+
+value_net = Network(dims=(40, 32, 1), output_activation=None)
         
-policy_optim = Adam(policy.parameters(), lr=1e-4, eps=1e-3)
+policy_optim = Adam(policy_net.parameters(), lr=1e-4, eps=1e-3)
+value_optim = Adam(value_net.parameters(), lr=1e-4, eps=1e-3)
 
 
 CONFIG = {
-    "total_eps": 100,
-    "eval_freq": 10,
-    "eval_episodes": 10,
+    "total_eps": 100000,
+    "eval_freq": 5000,
+    "eval_episodes": 1000,
     "gamma": 1.0,
     "epsilon": 1.0,
 }
@@ -160,7 +173,7 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 60.0
 
-sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('REINFORCE', 1, {'epsilon': 1.0, 'policy': policy})]
+sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('REINFORCE', 1, {'epsilon': 1.0, 'policy': policy_net})]
 buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
@@ -187,11 +200,21 @@ training_stats, eval_returns_list = train(CONFIG['total_eps'],
                                     epsilon=CONFIG['epsilon']
                                     )
 
-loss = training_stats['p_loss']
-plt.plot(loss)
+
+policy_loss = training_stats['p_loss']
+plt.plot(policy_loss)
 plt.title("Policy Loss vs Episode")
 plt.xlabel("Episode number")
 plt.savefig("loss.png")
+plt.close()
+# plt.show()
+
+value_loss = training_stats['v_loss']
+plt.plot(value_loss)
+plt.title("Value Loss vs Episode")
+plt.xlabel("Episode number")
+plt.savefig("loss.png")
+plt.close()
 # plt.show()
 
 x_ticks = np.arange(CONFIG['eval_freq'], CONFIG['total_eps']+1, CONFIG['eval_freq'])
