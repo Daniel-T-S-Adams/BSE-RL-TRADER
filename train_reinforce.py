@@ -154,7 +154,7 @@ policy_net = Network(
     dims=(40, 32, 32, 21), output_activation=nn.Softmax(dim=-1)
     )
 
-value_net = Network(dims=(40, 32, 1), output_activation=None)
+value_net = Network(dims=(40, 32, 32, 1), output_activation=None)
         
 policy_optim = Adam(policy_net.parameters(), lr=1e-4, eps=1e-3)
 value_optim = Adam(value_net.parameters(), lr=1e-4, eps=1e-3)
@@ -205,7 +205,7 @@ policy_loss = training_stats['p_loss']
 plt.plot(policy_loss)
 plt.title("Policy Loss vs Episode")
 plt.xlabel("Episode number")
-plt.savefig("loss.png")
+plt.savefig("policy_loss.png")
 plt.close()
 # plt.show()
 
@@ -213,7 +213,7 @@ value_loss = training_stats['v_loss']
 plt.plot(value_loss)
 plt.title("Value Loss vs Episode")
 plt.xlabel("Episode number")
-plt.savefig("loss.png")
+plt.savefig("value_loss.png")
 plt.close()
 # plt.show()
 
