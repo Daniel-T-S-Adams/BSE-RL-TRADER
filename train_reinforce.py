@@ -51,7 +51,13 @@ def update(
         v_loss = 0
         G = 0
         traj_length = len(observations)
-        
+
+        # Normalize rewards
+        rewards = np.array(rewards)
+        reward_mean = np.mean(rewards)
+        reward_std = np.std(rewards) + 1e-10  # Add a small value to avoid division by zero
+        normalised_rewards = (rewards - reward_mean) / reward_std
+    
         # Flatten each observation
         flattened_observations = [obs.flatten() for obs in observations]
         
@@ -59,14 +65,15 @@ def update(
         obs_tensor = torch.tensor(flattened_observations, dtype=torch.float32)
 
         # Compute action probabilities using the current policy
-        action_probabilities = policy_net(obs_tensor)
+        eps = 1e-10
+        action_probabilities = policy_net(obs_tensor) + eps
         baseline_values = value_net(obs_tensor).squeeze()
         
         # Precompute returns G for every timestep
         G = [ 0 for n in range(traj_length) ]
-        G[-1] = rewards[-1]
+        G[-1] = normalised_rewards[-1]
         for t in range(traj_length - 2, -1, -1):
-            G[t] = rewards[t] + gamma * G[t + 1]
+            G[t] = normalised_rewards[t] + gamma * G[t + 1]
 
         G = torch.tensor(G, dtype=torch.float32)
         advantage = G - baseline_values
@@ -128,8 +135,8 @@ def evaluate(episodes: int, market_params: tuple, policy, file) -> float:
     total_return = 0.0
 
     updated_market_params = list(market_params)    
-    updated_market_params[3]['sellers'][4][2]['policy'] = policy
-    updated_market_params[3]['sellers'][4][2]['epsilon'] = 0.0         # No exploring
+    updated_market_params[3]['sellers'][1][2]['policy'] = policy
+    updated_market_params[3]['sellers'][1][2]['epsilon'] = 0.0         # No exploring
 
     for _ in range(episodes):
         balance = 0.0
@@ -151,7 +158,7 @@ def evaluate(episodes: int, market_params: tuple, policy, file) -> float:
      
 
 policy_net = Network(
-    dims=(40, 32, 32, 21), output_activation=nn.Softmax(dim=-1)
+    dims=(40, 32, 21), output_activation=nn.Softmax(dim=-1)
     )
 
 value_net = Network(dims=(40, 32, 32, 1), output_activation=None)
@@ -161,8 +168,8 @@ value_optim = Adam(value_net.parameters(), lr=1e-4, eps=1e-3)
 
 
 CONFIG = {
-    "total_eps": 100000,
-    "eval_freq": 5000,
+    "total_eps": 50000,
+    "eval_freq": 2500,
     "eval_episodes": 1000,
     "gamma": 1.0,
     "epsilon": 1.0,
@@ -173,8 +180,8 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 60.0
 
-sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('REINFORCE', 1, {'epsilon': 1.0, 'policy': policy_net})]
-buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
+sellers_spec = [('GVWY', 9), ('REINFORCE', 1, {'epsilon': 1.0, 'policy': policy_net})]
+buyers_spec = [('GVWY', 10)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
@@ -202,24 +209,24 @@ training_stats, eval_returns_list = train(CONFIG['total_eps'],
 
 
 policy_loss = training_stats['p_loss']
-plt.plot(policy_loss)
+plt.plot(policy_loss, linewidth=1.0)
 plt.title("Policy Loss vs Episode")
 plt.xlabel("Episode number")
-plt.savefig("policy_loss.png")
-plt.close()
-# plt.show()
+# plt.savefig("policy_loss.png")
+# plt.close()
+plt.show()
 
 value_loss = training_stats['v_loss']
-plt.plot(value_loss)
+plt.plot(value_loss, linewidth=1.0)
 plt.title("Value Loss vs Episode")
 plt.xlabel("Episode number")
-plt.savefig("value_loss.png")
-plt.close()
-# plt.show()
+# plt.savefig("value_loss.png")
+# plt.close()
+plt.show()
 
 x_ticks = np.arange(CONFIG['eval_freq'], CONFIG['total_eps']+1, CONFIG['eval_freq'])
-plt.plot(x_ticks, eval_returns_list)
+plt.plot(x_ticks, eval_returns_list, linewidth=1.0)
 plt.title("Mean returns - REINFORCE")
 plt.xlabel("Episode number")
-plt.savefig("mean_returns.png")
-# plt.show()
+# plt.savefig("mean_returns.png")
+plt.show()
