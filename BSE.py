@@ -63,16 +63,9 @@ from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
 
-import torch
-from torch import nn, Tensor
-from torch.optim import Adam
-
-from neural_network import Network
-
-
 # a bunch of system constants (globals)
-bse_sys_minprice = 1                    # minimum price in the system, in cents/pennies
-bse_sys_maxprice = 200                    # maximum price in the system, in cents/pennies
+bse_sys_minprice = 1                  # minimum price in the system, in cents/pennies
+bse_sys_maxprice = 7                    # maximum price in the system, in cents/pennies
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
 
@@ -87,7 +80,7 @@ def calc_average_price(list):
         return weighted_average_price   
 
 
-def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=5):
+def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=7):
     """
     Given a value, calculates the bin it would fall into
     and returns the average of that bin.
@@ -118,14 +111,28 @@ def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, b
     return int(bin_average)
 
 
-def get_discrete_state(type, lob, time, order):
+def get_discrete_state(type, lob, countdown, order):
     best_bid = bin_average(lob['bids']['best'])
     best_ask = bin_average(lob['asks']['best'])
     worst_bid = bin_average(lob['bids']['worst'])
     worst_ask = bin_average(lob['asks']['worst'])
     avg_bid = bin_average(calc_average_price(lob['bids']['lob']))
     avg_ask = bin_average(calc_average_price(lob['asks']['lob']))
-
+    order = bin_average(order)
+    
+    if not (0 <= countdown <= 1):
+        raise ValueError("countdown should be between 0 and 1 inclusive.")
+    
+    # Calculate the bin width
+    bin_width = 1 / 10
+    
+    # Determine the bin index
+    bin_index = int(countdown // bin_width)
+    bin_index = float(bin_index)
+    
+    # Handle the edge case where value is exactly 1
+    if bin_index == 10.0:
+        bin_index -= 1.0
     # observation = np.array([type, float(int(time)), float(order), 
     #                         float(best_bid), float(best_ask), float(worst_bid), 
     #                         float(worst_ask), float(avg_bid), float(avg_ask)])
@@ -133,7 +140,7 @@ def get_discrete_state(type, lob, time, order):
     # observation = np.array([type, float(order), float(best_bid), float(best_ask), float(worst_bid), 
     #                         float(worst_ask), float(avg_bid), float(avg_ask)])
 
-    observation = np.array([type, float(order), float(best_bid), float(best_ask)])
+    observation = np.array([type , float(order), bin_index, float(best_bid), float(best_ask)])
     
     return observation
 
@@ -608,6 +615,8 @@ class Trader_Giveaway(Trader):
                           time, lob['QID'])
             self.lastquote = order
         return order
+    
+
 
 
 # Trader subclass ZI-C
@@ -1877,15 +1886,13 @@ class Trader_ZIP(Trader):
 
 class RLAgent(Trader):
     def __init__(self, ttype, tid, balance, params, time, 
-                 action_space: spaces.Space, obs_space: spaces.Space,  
-                 gamma=1.0, epsilon=0.9
+                 action_space: spaces.Space, obs_space: spaces.Space,  epsilon=0.9
                  ):
         
         super().__init__(ttype, tid, balance, params, time)
 
         self.action_space = action_space
         self.obs_space = obs_space
-        self.gamma: float = gamma
         self.epsilon: float = epsilon
         self.q_table:DefaultDict = defaultdict(lambda: 0)
 
@@ -1896,6 +1903,7 @@ class RLAgent(Trader):
         else:
             raise ValueError("Trader should be a buyer or seller")
         
+        
         # Check if they gave different parameters
         if type(params) is dict:
             if 'q_table_buyer' in params and self.type == 'Buyer':
@@ -1905,9 +1913,10 @@ class RLAgent(Trader):
             if 'epsilon' in params:
                 self.epsilon = params['epsilon']
 
-        self.sa_counts = {}
+
         self.current_obs = None
         self.old_balance = 0
+        self.num_actions = len(self.action_space)
 
         # Initialize file to write obs, action, rewards
         if self.type == 'Buyer':
@@ -1918,24 +1927,6 @@ class RLAgent(Trader):
         with open(file, 'w', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(['Observation', 'Action', 'Reward'])
-
-    
-    def set_obs(self, obs):
-        self.current_obs = obs
-
-
-    def epsilon_decay(self, strat, eps_start=1.0, eps_min=0.05, eps_decay=0.99):
-        self.epsilon = eps_start
-
-        if strat == 'constant':
-            self.epsilon = 0.9
-
-        if strat == 'linear':
-            self.epsilon = max(eps_min, self.epsilon - eps_decay)
-
-        if strat == 'exponential':
-            self.epsilon = max(eps_min, eps_decay*self.epsilon)
-
 
     @classmethod
     def load_q_table(self, file_path: str) -> DefaultDict:
@@ -1960,109 +1951,52 @@ class RLAgent(Trader):
 
         return q_table
 
-
-    def dump_q_table(self, q_table: DefaultDict, file_path: str):
-        """
-        Save the Q-table to a CSV file.
-
-        :param q_table (DefaultDict): The Q-table to save.
-        :param file_path (str): The path to the file where the Q-table will be saved.
-        """
-        # Load the existing Q-table from the file
-        existing_q_table = self.load_q_table(file_path)
-
-        # Update existing Q-table with new entries
-        for (state, action), q_value in q_table.items():
-            existing_q_table[(state, action)] = q_value
-
-        # Write the updated Q-table back to the file
-        with open(file_path, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['State', 'Action', 'Q-Value'])  # Write the header
-            for (state, action), q_value in existing_q_table.items():
-                writer.writerow([state, action, q_value])
-
-
-    def learn(self) -> Dict:
-        # Load the current q_table from the CSV file
-        q_table = self.load_q_table('q_table.csv')
-
-        traj_length = len(self.rew_list)
-        G = 0
-        state_action_list = list(zip(self.obs_list, self.act_list))
-        
-        for t in range(traj_length - 1, -1, -1):
-            state_action_pair = (self.obs_list[t], self.act_list[t])
-
-            if state_action_pair not in state_action_list[:t]:
-                G = self.gamma * G + self.rew_list[t]
-
-                self.sa_counts[state_action_pair] = self.sa_counts.get(state_action_pair, 0) + 1
-                self.q_table[state_action_pair] += (
-                    G - self.q_table[state_action_pair]
-                ) / self.sa_counts.get(state_action_pair, 0)
-                
-        # Save the updated q_table back to the CSV file
-        if self.type == 'Buyer':
-            self.dump_q_table(self.q_table, 'q_table_buyer.csv')
-        elif self.type == 'Seller':
-            self.dump_q_table(self.q_table, 'q_table_seller.csv')
-      
-        return self.q_table
-
-
-    def q_learn(
-        self, obs: int, action: int, reward: float, n_obs: int, done: bool
-    ) -> float:
-        """Implements the Q-Learning method and updates 
-        the Q-table based on agent experience.
-
-        :param obs (int): received observation representing the current environmental state
-        :param action (int): index of applied action
-        :param reward (float): received reward
-        :param n_obs (int): received observation representing the next environmental state
-        :param done (bool): flag indicating whether a terminal state has been reached
-        :return (float): updated Q-value for current observation-action pair
-        """
-        # Best action for the next state
-        a_ = np.argmax([self.q_table[(n_obs, a)] for a in range(self.num_actions)])
-
-        # Update Q-value using Q-learning update rule
-        self.q_table[(obs, action)] += (
-            self.alpha * (reward + self.gamma * self.q_table[(n_obs, a_)] * (1 - done) - self.q_table[(obs, action)])
-            )
-
-        obs = n_obs
-
-        return self.q_table[(obs, action)]
-
     
     def getorder(self, time, countdown, lob):     
-        self.num_actions = len(self.action_space)
-
+        if self.type == 'Buyer':
+                file = 'episode_buyer.csv'
+        elif self.type == 'Seller':
+                file = 'episode_seller.csv'
+        
+        
         if len(self.orders) < 1:
             order = None
+            
 
         else:
             order_type = self.orders[0].otype
             # return the best action following an epsilon-greedy policy
-            obs = tuple(get_discrete_state(self.type, lob, time, self.orders[0].price))
+            obs = tuple(get_discrete_state(self.type, lob, countdown, self.orders[0].price))
             # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
+                
                 if self.type == 'Buyer':
                     profit = random.choice(self.action_space)
                     quote = self.orders[0].price * (1 - profit)
                 elif self.type == 'Seller':
-                    profit = random.choice(self.action_space)
-                    quote = self.orders[0].price * (1 + profit)
+                    action = random.choice(self.action_space)
+                    quote = self.orders[0].price + action
+                       
+                        
+                    
             # Exploit - choose the action with the highest probability
             else:
+               
                 if self.type == 'Buyer':
                     profit = max(list(range(self.num_actions)), key = lambda x: self.q_table[(obs, x)])
                     quote = self.orders[0].price * (1 - profit)
                 elif self.type == 'Seller':
-                    profit = max(list(range(self.num_actions)), key = lambda x: self.q_table[(obs, x)])
-                    quote = self.orders[0].price * (1 + profit)
+                    # Step 1: Calculate the maximum Q-value for the given observation
+                    max_q_value = max(self.q_table[(obs, x)] for x in self.action_space)
+                    # Step 2: Find all actions that have this maximum Q-value
+                    max_actions = [x for x in self.action_space if self.q_table[(obs, x)] == max_q_value]
+                    # Step 3: Choose one of these actions randomly
+                    action = random.choice(max_actions)
+                    
+                    quote = self.orders[0].price + action 
+                    
+
+            
 
             # Check if it's a bad bid
             if self.type == 'Buyer' and quote > self.orders[0].price:
@@ -2072,21 +2006,15 @@ class RLAgent(Trader):
             elif self.type == 'Seller' and quote < self.orders[0].price:
                 quote = self.orders[0].price
 
-            order = Order(self.tid, order_type, (quote), self.orders[0].qty, time, lob['QID'])
 
-            if self.type == 'Buyer':
-                file = 'episode_buyer.csv'
-            elif self.type == 'Seller':
-                file = 'episode_seller.csv'
-            
             # Write the current state, action and reward
-            # obs = get_discrete_state(self.type, lob, time, self.orders[0].price)
-            action = profit
             reward = 0.0
             with open(file, 'a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([obs, action, reward])
         
+            order = Order(self.tid, order_type, (quote), self.orders[0].qty, time, lob['QID'])
+            self.lastquote = order
         return order
     
 
@@ -2120,161 +2048,6 @@ class RLAgent(Trader):
         
         return None
     
-
-
-class Reinforce(RLAgent):
-    def __init__(
-            self,
-            ttype, 
-            tid, 
-            balance, 
-            params, 
-            time, 
-            action_space: spaces.Space, 
-            obs_space: spaces.Space, 
-            learning_rate, 
-            gamma=1.0, 
-            epsilon=0.9,
-    ):
-        
-        super().__init__(ttype, tid, balance, params, time, action_space, obs_space, gamma, epsilon)
-        self.state_size = np.prod(self.obs_space.shape)
-        self.action_size = self.action_space.n
-        self.learning_rate = learning_rate
-
-        self.profit_stepsize = 1/(self.action_size - 1)
-        self.max_length = 0
-
-        self.policy = Network(
-            dims=(self.state_size, self.action_size), output_activation=nn.Softmax(dim=-1)
-            )
-        
-        self.policy_optim = Adam(self.policy.parameters(), lr=learning_rate, eps=1e-3)
-
-        # Check if they gave different parameters
-        if type(params) is dict:
-            if 'policy' in params:
-                self.policy = params['policy']
-            if 'epsilon' in params:
-                self.epsilon = params['epsilon']
-
-
-    def preprocess_lob(self, lob: Dict) -> np.ndarray:
-        """
-        Converts the LOB dictionary into a 3D numpy array with shape 
-        (2, max_length, 2). The first dimension corresponds to bids and 
-        asks, and the last dimension corresponds to price and quantity.
-        """
-        bids = lob['bids']['lob']
-        asks = lob['asks']['lob']
-
-        # Adjust the max_length if we encounter larger lists
-        # self.max_length = max(self.max_length, len(bids), len(asks))
-        self.max_length = 10
-
-        # Initialize a 3D numpy array for bids and asks
-        lob_array = np.zeros((2, self.max_length, 2), dtype=np.float32)
-
-        # Fill the bids section of the array
-        padded_bids = self.pad_lob(bids, self.max_length)
-        lob_array[0] = np.array(padded_bids, dtype=np.float32)
-
-        # Fill the asks section of the array
-        padded_asks = self.pad_lob(asks, self.max_length)
-        lob_array[1] = np.array(padded_asks, dtype=np.float32)
-
-        return lob_array
-
-    def pad_lob(self, lob_list: List[List[int]], max_length: int) -> List[List[int]]:
-        """
-        Pads the LOB list with zeros to ensure it has the same length.
-        """
-        padded_lob = lob_list + [[0.0, 0.0]] * (max_length - len(lob_list))
-        return padded_lob[:max_length]
-
-
-    def getorder(self, time, countdown, lob):
-        if len(self.orders) < 1:
-            order = None
-
-        else:
-            order_type = self.orders[0].otype
-
-            # Extract relevant features from the lob
-            obs = self.preprocess_lob(lob)
-            state = torch.tensor(obs, dtype=torch.float32).flatten()
-            action_prob = self.policy(state)
-
-            # Explore - sample a random action
-            if random.uniform(0, 1) < self.epsilon:
-                if self.type == 'Buyer':
-                    action = self.action_space.sample()
-                    quote = self.orders[0].price * (1 - self.profit_stepsize*action)
-                elif self.type == 'Seller':
-                    action = self.action_space.sample()
-                    quote = self.orders[0].price * (1 + self.profit_stepsize*action)
-
-            # Exploit - choose the action with the highest probability
-            else:
-                if self.type == 'Buyer':
-                    action = torch.argmax(action_prob).item()
-                    quote = self.orders[0].price * (1 - self.profit_stepsize*action)
-                elif self.type == 'Seller':
-                    action = torch.argmax(action_prob).item()
-                    quote = self.orders[0].price * (1 + self.profit_stepsize*action)
-
-            # Check if it's a bad bid
-            if self.type == 'Buyer' and quote > self.orders[0].price:
-                quote = self.orders[0].price
-            
-            # Check if it's a bad ask
-            elif self.type == 'Seller' and quote < self.orders[0].price:
-                quote = self.orders[0].price
-
-            order = Order(self.tid, order_type, (quote), self.orders[0].qty, time, lob['QID'])
-
-            if self.type == 'Buyer':
-                file = 'episode_buyer.csv'
-            elif self.type == 'Seller':
-                file = 'episode_seller.csv'
-            
-            # Write the current state, action and reward
-            reward = 0.0
-            with open(file, 'a', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow([obs, action, reward])
-        
-
-        return order
-    
-
-    def update(
-        self, observations: List[np.ndarray], actions: List[int], rewards: List[float],
-        ) -> Dict[str, float]:
-        # Initialise loss and returns
-        p_loss = 0
-        G = 0
-        traj_length = len(observations)
-
-        # Compute action probabilities using the current policy
-        action_probabilities = self.policy(torch.tensor(observations, dtype=torch.float32))
-
-        # Loop backwards in the episode
-        for t in range(traj_length - 2, -1, -1):
-            G = self.gamma * G + rewards[t+1]
-            action_prob = action_probabilities[t, actions[t]]   # Probability of the action at time step t
-            p_loss = p_loss - G * torch.log(action_prob)   # Minimise loss function
-
-        p_loss = p_loss/traj_length   # Normalise policy loss
-
-        # Backpropogate and perform optimisation step
-        self.policy_optim.zero_grad()
-        p_loss.backward()
-        self.policy_optim.step()
-
-        return {"p_loss": float(p_loss)}
-
-
 
 ########################---trader-types have all been defined now--################
 
@@ -2359,12 +2132,8 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             return Trader_PRZI('PRDE', name, balance, parameters, time0)
         elif robottype == 'RL':
             return RLAgent('RL', name, balance, parameters, time0, 
-                           action_space=[0.03, 0.06, 0.09, 0.12, 0.15], 
+                           action_space=[n/1.0 for n in range(4)], 
                            obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
-        elif robottype == 'REINFORCE':
-            return Reinforce('REINFORCE', name, balance, parameters, time0, 
-                           action_space=spaces.Discrete(21), learning_rate=0.01,
-                           obs_space=spaces.Box(low=0, high=np.inf, shape=(2, 10, 2), dtype=np.float32))
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 
@@ -2412,6 +2181,8 @@ def populate_market(traders_spec, traders, shuffle, verbose):
 
         if ttype == 'RL':
             # parameters for RL agent
+            # tries to retrieve the value associated 
+            # with the key 'epsilon' in the dictionary trader_params.
             epsilon = trader_params.get('epsilon', 0.9)
             parameters = {'epsilon': epsilon}
             if 'q_table_buyer' in trader_params:
@@ -2421,12 +2192,7 @@ def populate_market(traders_spec, traders, shuffle, verbose):
                 q_table_seller = trader_params['q_table_seller']
                 parameters['q_table_seller'] = q_table_seller
 
-        if ttype == 'REINFORCE':
-            epsilon = trader_params.get('epsilon', 0.9)
-            parameters = {'epsilon': epsilon}
-            if 'policy' in trader_params:
-                parameters['policy'] = trader_params['policy']
-
+        
         return parameters
 
     landscape_mapping = False   # set to true when mapping fitness landscape (for PRSH etc).
@@ -2743,6 +2509,7 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
         os.fsync(stratfile)
 
     def blotter_dump(session_id, traders):
+        # this function writes a blotter file for each trader which con
         bdump = open(session_id+'_blotters.csv', 'w')
         for t in traders:
             bdump.write('%s, %d\n' % (traders[t].tid, len(traders[t].blotter)))
@@ -2972,7 +2739,7 @@ if __name__ == "__main__":
 
         # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
         # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
-        sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1), ('REINFORCE', 1, {})]
+        sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
         buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
 
         traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
