@@ -1,15 +1,12 @@
-def epsilon_decay(strat, timestep, max_timestep, eps_start=1.0, eps_min=0.05, eps_decay=0.9):
+def epsilon_decay(strat, timestep, max_timestep, eps_start=1.0, eps_min=0.05):
 
     if strat == 'constant':
         epsilon = 0.9
 
     if strat == 'linear':
-        decay_steps = eps_decay * max_timestep
-        epsilon = max(eps_min, eps_start - (eps_start - eps_min) * min(1.0, timestep / decay_steps))
-
-    if strat == 'exponential':
-        epsilon = max(eps_min, eps_decay*epsilon)
-
+        epsilon_step = (eps_start - eps_min)/max_timestep
+        epsilon = eps_start - timestep*epsilon_step
+        
     return epsilon
 
 

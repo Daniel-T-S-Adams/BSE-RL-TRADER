@@ -14,8 +14,8 @@ import shutil
 import csv
 
 
+
 gamma = 0.3 # discounting factor
-M = 10 # number of episodes for monte carlo
 
 def read_average_profit(file_path):
     with open(file_path, 'r') as file:
@@ -85,6 +85,16 @@ def save_dict_to_csv(filename: str, data: dict):
         for (state, action), q_value in data.items():
             writer.writerow([state, action, q_value])
 
+# Function to save sa_counts to a CSV file
+def save_sa_counts_to_csv(sa_counts, filename):
+    with open(filename, 'w', newline='') as csv_file:
+        writer = csv.writer(csv_file)
+        # Write the header
+        writer.writerow(['State', 'Action', 'Count'])
+        # Write the data
+        for (state, action), count in sa_counts.items():
+            writer.writerow([state, action, count])
+
 
 def learn(obs: List[int], actions: List[int], rewards: List[float], type, sa_counts, sa_rewards) -> Tuple[DefaultDict, DefaultDict]:
 
@@ -142,9 +152,7 @@ def average(sa_counts, sa_rewards, save=False):
         
     return sa_average
 
-def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file) -> float:
-    total_return = 0.0
-    
+def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file, new_epsilon) -> float:
 
     updated_market_params = list(market_params)    
     # if file == 'q_table_buyer.csv':
@@ -152,12 +160,13 @@ def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file) ->
     #     updated_market_params[3]['buyers'][0][2]['epsilon'] = 0.0                           # No exploring
     # elif file == 'q_table_seller.csv':
     updated_market_params[3]['sellers'][1][2]['q_table_seller'] = 'q_table_seller.csv'
-    updated_market_params[3]['sellers'][1][2]['epsilon'] = 0.0                          # No exploring
+    updated_market_params[3]['sellers'][1][2]['epsilon'] = new_epsilon                          # No exploring
 
     # initialize an empty dictionary to store cumulative average profit
     cumulative_stats = {}
-    for _ in range(episodes):
-        balance = 0.0
+    # for storing previous profit
+    previous_avg_profit = None
+    for episode in range(episodes):
         # Run the market session
         market_session(*updated_market_params)
         # Read the average profit file at the final timestep of each market session
@@ -165,34 +174,40 @@ def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file) ->
         # getting a cumulative tally of the average profit for each trader type 
         update_cumulative_average_profit(cumulative_stats, current_stats)
 
-        # Read the episode file
-        with open(file, 'r') as f:
-            reader = csv.reader(f)
-            next(reader)  # Skip the header
-            for row in reader:
-                reward = float(row[2])
-                balance += reward
-
-        # Profit made by the RL agent at the end of the trading window
-        total_return += balance
-    
-    mean_return = total_return / episodes
-    # get the average over all episodes
+        # Calculate average profit for the current episode
+        current_avg_profit = sum([cumulative_stats[ttype]['avg_profit'] for ttype in cumulative_stats])/(episode+1)
+        # Check for convergence every 100 steps
+        if episode % 100 == 0:
+            if previous_avg_profit is not None:
+                profit_change = abs(current_avg_profit - previous_avg_profit)
+                if profit_change <= 0.00005:
+                    print(f"Convergence achieved at episode {episode} with profit change {profit_change}")
+                    # get the average over all episodes
+                    for ttype in cumulative_stats:
+                        cumulative_stats[ttype]['avg_profit'] /= (episode+1)
+                    return cumulative_stats
+            
+            if episode % 100 == 0 or episode == 0:
+                previous_avg_profit = current_avg_profit
+       
+    # get the average over all episodes if we dont converge
+    print(f"Did not converge after {episodes} episodes")
     for ttype in cumulative_stats:
         cumulative_stats[ttype]['avg_profit'] /= episodes
+        
+       
+    return cumulative_stats
 
-    return mean_return, cumulative_stats
 
-
-def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> DefaultDict:
+def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon_start: float) -> DefaultDict:
     GPI_iter = 0
+    new_epsilon = epsilon_start
     print(f"Starting GPI iteration {GPI_iter}")
     sa_counts = defaultdict(lambda: 0)
     sa_rewards = defaultdict(lambda: 0)
     for episode in range(1, total_eps + 1):
         new_MC_iteration = False
         market_session(*market_params)
-        
         
         # Check if there's a sell trader
         try:
@@ -210,6 +225,9 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
             pass
 
         if episode % M == 0: 
+            # Save sa_counts to a CSV file with the episode number in the filename
+            sa_counts_filename = f'sa_counts_episode_{episode}.csv'
+            save_sa_counts_to_csv(sa_counts, sa_counts_filename)
             # divide the q_table by number of times each state visited and save it to a csv file name q_table_seller.csv
             save = True
             average(sa_counts, sa_rewards, save)
@@ -244,9 +262,12 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
                 current_qtable = average(sa_counts, sa_rewards, save)
                 if 'previous_qtable' in locals():
                     total_difference = 0
+                    
                     for key in current_qtable:
+                        
                         previous_value = previous_qtable.get(key, 0)
                         total_difference += abs(current_qtable[key] - previous_value)
+                    
                     # Print or log the total difference
                     print(f"Total difference after episode {episode}: {total_difference}")
                     
@@ -256,30 +277,33 @@ def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon) -> Defa
         
         # Perform evaluation every `eval_freq` episodes
         if episode % eval_freq == 0:
-            print(f"Training Episode {episode}/{total_eps}")
+            print(f"Evaluating after Training Episode {episode}/{total_eps}")
             
-            # mean_return_buyer, mean_return_list = evaluate(
-            #     episodes=CONFIG['eval_episodes'], market_params=market_params, 
-            #     q_table='q_table_buyer.csv', file='episode_buyer.csv'
-            #     )
             
-            mean_return_seller, cumulative_stats = evaluate(
-                episodes=CONFIG['eval_episodes'], market_params=market_params, 
-                q_table='q_table_seller.csv', file='episode_seller.csv'
-                )
+            cumulative_stats = evaluate(
+            episodes=CONFIG['eval_episodes'], market_params=market_params, 
+            q_table='q_table_seller.csv', file='episode_seller.csv', new_epsilon = new_epsilon)
+            
             
             for ttype in cumulative_stats:
-               print(f"EVALUATION: EP {episode}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
-    
+                print(f"EVALUATION: EP {episode}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
+                
+                
+            # update epsilon 
+            new_epsilon = epsilon_decay('linear', GPI_iter, number_of_policy_improvements, epsilon_start, 0.05)
+            market_params[3]['sellers'][1][2]['epsilon'] = new_epsilon
+            print(f"New epsilon: {new_epsilon}")
+            
     return 5
 
-number_of_policy_improvements = 2
+M = 300 # number of episodes for monte carlo
+number_of_policy_improvements = 10
 CONFIG = {
     "total_eps": number_of_policy_improvements*M,
     "eval_freq": M,
-    "eval_episodes": 10,
+    "eval_episodes": 2000,
     "gamma": 0.0,
-    "epsilon": 0.8,
+    "epsilon": 0.5,
 }
 
 # Define market parameters
@@ -287,15 +311,15 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 30.0
 
-sellers_spec = [('GVWY',19), ('RL', 1, {'epsilon': 1.0})]
+sellers_spec = [('GVWY',19), ('RL', 1, {'epsilon': CONFIG['epsilon']})]
 buyers_spec = [('GVWY',20)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
-range1 = (1, 4)
+range1 = (1, 3)
 supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-range2 = (1, 4)
+range2 = (1, 3)
 demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
 # new customer orders arrive at each trader approx once every order_interval seconds
@@ -312,7 +336,7 @@ verbose = False
 q_table = train(total_eps=CONFIG['total_eps'], 
                 market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
                 eval_freq=CONFIG['eval_freq'],
-                epsilon=CONFIG['epsilon'])
+                epsilon_start=CONFIG['epsilon'])
 
 
 print(f"Finished with gamma equal to {gamma}")

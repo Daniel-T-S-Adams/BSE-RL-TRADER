@@ -1949,18 +1949,21 @@ class RLAgent(Trader):
                     action = float(action) # convert action to float to match the observation (in get order)
                     
                     # Now we convert the state to the correct format to match the observation (in get order)
-                    
+                    print(f"Row: {row}")  # Add this line to debug
                     # Extract the string representing the tuple and the action
                     state_str = state
+
                     # Convert the string to a list of strings (remove parentheses and split by ', ')
                     string_tuple = tuple(state_str.strip('()').split(', '))
+
                     # Inject 'Seller' at the beginning
                     new_tuple = ('Seller',) + string_tuple
+
                     # Combine with the original action
                     new_state = (new_tuple, action)
                     q_table[new_state] = float(q_value)
                     
-                   
+                    print(new_state)
                     
         except FileNotFoundError:
             print(f"File not found at {file_path}")
@@ -2004,6 +2007,9 @@ class RLAgent(Trader):
                     quote = self.orders[0].price * (1 - profit)
                 elif self.type == 'Seller':
                     # Step 1: Calculate the maximum Q-value for the given observation
+                    print('here')
+                    print([(obs,x) for x in self.action_space])
+                    print([self.q_table[(obs, x)] for x in self.action_space])
                     max_q_value = max(self.q_table[(obs, x)] for x in self.action_space)
                     # Step 2: Find all actions that have this maximum Q-value
                     max_actions = [x for x in self.action_space if self.q_table[(obs, x)] == max_q_value]
@@ -2206,9 +2212,11 @@ def populate_market(traders_spec, traders, shuffle, verbose):
                 q_table_buyer = trader_params['q_table_buyer']
                 parameters['q_table_buyer'] = q_table_buyer
             elif 'q_table_seller' in trader_params:
+                print('we have hit a q-table')
                 q_table_seller = trader_params['q_table_seller']
                 parameters['q_table_seller'] = q_table_seller
-                
+            else: 
+                print('No q-table found')
         return parameters
 
     landscape_mapping = False   # set to true when mapping fitness landscape (for PRSH etc).
