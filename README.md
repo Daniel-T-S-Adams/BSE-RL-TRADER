@@ -1,1 +1,1 @@
-# dissertation
+# Contains the code for the paper: Reinforcement Learning on the Bristol Stock Exchange 

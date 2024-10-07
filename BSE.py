@@ -63,9 +63,12 @@ from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
 
+# Importing Global Parameters
+from GlobalParameters import CONFIG
+
 # a bunch of system constants (globals)
-bse_sys_minprice = 1                  # minimum price in the system, in cents/pennies
-bse_sys_maxprice = 5                    # maximum price in the system, in cents/pennies
+bse_sys_minprice = CONFIG["bse_sys_minprice"]        # minimum price in the system, in cents/pennies
+bse_sys_maxprice = CONFIG["bse_sys_maxprice"]        # maximum price in the system, in cents/pennies
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
 
@@ -80,7 +83,7 @@ def calc_average_price(list):
         return weighted_average_price   
 
 
-def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=1):
+def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=5):
     """
     Given a value, calculates the bin it would fall into
     and returns the average of that bin.
@@ -1887,15 +1890,12 @@ class Trader_ZIP(Trader):
 
 
 class RLAgent(Trader):
-    def __init__(self, ttype, tid, balance, params, time, 
-                 action_space: spaces.Space, obs_space: spaces.Space,  epsilon=0.9
+    def __init__(self, ttype, tid, balance, params, time
                  ):
         
         super().__init__(ttype, tid, balance, params, time)
 
-        self.action_space = action_space
-        self.obs_space = obs_space
-        self.epsilon: float = epsilon
+        self.action_space = self.params['action_space']
         self.q_table:DefaultDict = defaultdict(lambda: 0)
 
         if self.tid[:1] == 'B':
@@ -1938,7 +1938,7 @@ class RLAgent(Trader):
 
         :param file_path (str): The path to the file where the Q-table can be found.
         """
-        q_table = defaultdict(lambda: 1)
+        q_table = defaultdict(lambda: 0)
 
         try:
             with open(file_path, 'r', newline='') as f:
@@ -2003,13 +2003,15 @@ class RLAgent(Trader):
                     profit = max(list(range(self.num_actions)), key = lambda x: self.q_table[(obs, x)])
                     quote = self.orders[0].price * (1 - profit)
                 elif self.type == 'Seller':
-                    # Step 1: Calculate the maximum Q-value for the given observation
-                    max_q_value = max(self.q_table[(obs, x)] for x in self.action_space)
-                    # Step 2: Find all actions that have this maximum Q-value
-                    max_actions = [x for x in self.action_space if self.q_table[(obs, x)] == max_q_value]
-                    # Step 3: Choose one of these actions randomly
+                    # Step 1: Find the range of admissible actions for the customer price and BSE limits
+                    admissible_actions = [x for x in self.action_space and range(bse_sys_maxprice - int(self.orders[0].price) + 1)]
+                    # Step 2: Calculate the maximum Q-value for the given observation
+                    max_q_value = max(self.q_table[(obs, x)] for x in admissible_actions)
+                    # Step 3: Find all actions that have this maximum Q-value
+                    max_actions = [x for x in admissible_actions if self.q_table[(obs, x)] == max_q_value]
+                    # Step 4: Choose one of these actions randomly
                     action = random.choice(max_actions)
-                    
+                    # Step 5: Calculate the quote price as the cutomer price plus the action
                     quote = self.orders[0].price + action 
                     
 
@@ -2148,9 +2150,7 @@ def populate_market(traders_spec, traders, shuffle, verbose):
         elif robottype == 'PRDE':
             return Trader_PRZI('PRDE', name, balance, parameters, time0)
         elif robottype == 'RL':
-            return RLAgent('RL', name, balance, parameters, time0, 
-                           action_space=[n/1.0 for n in range(2)], 
-                           obs_space=spaces.MultiDiscrete([120, 100, 10, 10, 10, 10, 10, 10]))
+            return RLAgent('RL', name, balance, parameters, time0)
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 
@@ -2197,17 +2197,22 @@ def populate_market(traders_spec, traders, shuffle, verbose):
                                   'strat_min': trader_params['s_min'], 'strat_max': trader_params['s_max']}
 
         if ttype == 'RL':
-            # parameters for RL agent
+            # WE SHOULD MAKE IT SO THAT WE CAN JUST LOAD IN THE ENTIRE dictionary.
+            # load parameters for RL agent
+            parameters = trader_params
             # tries to retrieve the value associated 
             # with the key 'epsilon' in the dictionary trader_params.
-            epsilon = trader_params.get('epsilon', 0.9)
-            parameters = {'epsilon': epsilon}
-            if 'q_table_buyer' in trader_params:
-                q_table_buyer = trader_params['q_table_buyer']
-                parameters['q_table_buyer'] = q_table_buyer
-            elif 'q_table_seller' in trader_params:
-                q_table_seller = trader_params['q_table_seller']
-                parameters['q_table_seller'] = q_table_seller
+            # epsilon = trader_params.get('epsilon', 0.9)
+            # parameters = {'epsilon': epsilon}
+            # if 'q_table_buyer' in trader_params:
+            #     q_table_buyer = trader_params['q_table_buyer']
+            #     parameters['q_table_buyer'] = q_table_buyer
+            # elif 'q_table_seller' in trader_params:
+            #     q_table_seller = trader_params['q_table_seller']
+            #     parameters['q_table_seller'] = q_table_seller
+            
+            # actions = trader_params.get('action_space')
+            # parameters['action_space'] = actions
                 
         return parameters
 
@@ -2239,7 +2244,7 @@ def populate_market(traders_spec, traders, shuffle, verbose):
         for s in range(ss[1]):
             tname = 'S%02d' % n_sellers  # buyer i.d. string
             if len(ss) > 2:
-                # third part of the buyer-spec is params for this trader-type
+                # third part of the seller-spec is params for this trader-type
                 params = unpack_params(ss[2], landscape_mapping)
                 
             else:
