@@ -3,19 +3,114 @@ import csv
 import numpy as np 
 from tqdm import tqdm
 from BSE import market_session
-from matplotlib import pyplot as plt
 from collections import defaultdict
 from typing import List, Dict, DefaultDict, Tuple
 from q_table_data import load_q_table, dump_q_table, update_q_table
 from epsilon_scheduling import epsilon_decay
+
+# Plotting
+from matplotlib import pyplot as plt
+from Plotting import plot_avg_profit
+
 #file handling
 from typing import List, Tuple
 import shutil
 import csv
+import os
+
+# Importing Global Parameters
+from GlobalParameters import CONFIG
 
 
+# Create the subfolders for saving results of this setup
+if not os.path.exists(CONFIG["q_tables"]):
+    os.makedirs(CONFIG["q_tables"])
+    
+if not os.path.exists(CONFIG["counts"]):
+    os.makedirs(CONFIG["counts"])
+    
 
-gamma = 0.3 # discounting factor
+
+def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: float) -> DefaultDict:
+    saved_stats = [] # start a list which we will be appending. 
+    # Start the GPI iterations at 1 
+    GPI_iter = 1
+    print(f"Starting GPI iteration {GPI_iter}")
+    
+    epsilon = epsilon_start
+    
+    # Initialize the counts and returns dictionaries
+    sa_counts = defaultdict(lambda: 0)
+    sa_returns = defaultdict(lambda: 0)
+    
+    for episode in range(1, total_eps + 1):
+        # Run the market session once, it saves a CSV file
+        market_session(*market_params)
+        
+        # Check if there's a sell trader, and then read the episode infomation from its CSV file
+        # note this means every episode we need to write and read a CSV
+        try:
+            file = 'episode_seller.csv'
+            obs_list, action_list, reward_list = load_episode_data(file)
+        except Exception as e:
+            print(f"Error loading seller episode {episode}: {e}")
+            pass
+        
+        # Update the count and returns
+        try:
+            sa_counts, sa_returns = learn(obs_list, action_list, reward_list, sa_counts, sa_returns)
+        except Exception as e:
+            print(f"Error computing new count and returns for seller episode {episode}: {e}")
+            pass
+
+        # If we have done the designated number of episodes for this policy evaluation, compute the q_values i.e. q_table
+        if episode % CONFIG["eps_per_evaluation"] == 0: 
+            
+            # Compute the q_table by averaging and save it to a CSV file name q_table_seller.csv
+            save = True
+            average(sa_counts, sa_returns, save)
+            
+            # Save the sellers q_table file for this GPI_iter (to keep track)
+            new_file_name = os.path.join(CONFIG["q_tables"],f'q_table_seller_after_GPI_{GPI_iter}.csv')
+            shutil.copy('q_table_seller.csv', new_file_name)  
+            
+            # Save sa_counts to a CSV file for this GPI_iter (to keep track)
+            sa_counts_filename = os.path.join(CONFIG["counts"],f'sa_counts_after_GPI_{GPI_iter}.csv')
+            save_sa_counts_to_csv(sa_counts, sa_counts_filename)
+            
+            # Restart the counts and returns for the next iteration of policy evalutation
+            sa_counts = defaultdict(lambda: 0)
+            sa_returns = defaultdict(lambda: 0)
+            
+            # Update epsilon for the next iteration of policy evaluation
+            old_epsilon = epsilon   # save incase we want to test this policy  
+            epsilon = epsilon_decay('linear', GPI_iter, CONFIG["num_GPI_iter"], epsilon_start, 0.05)
+            market_params[3]['sellers'][1][2]['epsilon'] = epsilon
+            print(f"New epsilon: {epsilon}")
+            
+            
+            GPI_iter += 1
+            print(f"Starting GPI iteration {GPI_iter}")
+        
+        # Perform a test of these policies performance every `test_freq` episodes
+        if episode % test_freq == 0:
+            print(f"Testing the Performance after GPI iteration {GPI_iter}")
+            
+            
+            cumulative_stats = test_policy(
+            episodes=CONFIG['test_episodes'], market_params=market_params, 
+            q_table='q_table_seller.csv', file='episode_seller.csv', epsilon = old_epsilon)
+            
+            
+            for ttype in cumulative_stats:
+                print(f"Performance Test: GPI Iter {GPI_iter}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
+                
+            saved_stats.append(cumulative_stats)
+            
+    return saved_stats # saved stats is a list of dictionaries one for each GPI iteration. 
+
+   
+
 
 def read_average_profit(file_path):
     with open(file_path, 'r') as file:
@@ -96,45 +191,43 @@ def save_sa_counts_to_csv(sa_counts, filename):
             writer.writerow([state, action, count])
 
 
-def learn(obs: List[int], actions: List[int], rewards: List[float], type, sa_counts, sa_rewards) -> Tuple[DefaultDict, DefaultDict]:
-
-    if len(rewards) == 0:
-        return sa_counts, sa_rewards
+def learn(obs: List[int], actions: List[int], rewards: List[float], sa_counts, sa_returns) -> Tuple[DefaultDict, DefaultDict]:
+    traj_length = len(rewards)   
+    
+    if traj_length == 0:
+        return sa_counts, sa_returns
 
     # Precompute returns G for every timestep
-    traj_length = len(rewards)
-    if traj_length == 0:
-        raise ValueError("The rewards list is empty")
     G = [ 0 for n in range(traj_length) ]
     G[-1] = rewards[-1]
     for t in range(traj_length - 2, -1, -1):
-        G[t] = rewards[t] + gamma * G[t + 1] 
+        G[t] = rewards[t] + CONFIG["gamma"] * G[t + 1] 
     
-    # Update rewards and counts 
+    # Update returns and counts 
     for t in range(traj_length):
         state_action_pair = (tuple(obs[t]), actions[t])
         sa_counts[state_action_pair] += 1
-        sa_rewards[state_action_pair] += G[t]
+        sa_returns[state_action_pair] += G[t]
         
     
-    return sa_counts, sa_rewards
+    return sa_counts, sa_returns
 
 
-def average(sa_counts, sa_rewards, save=False):
-    # Ensure all keys in sa_rewards are in sa_counts to avoid KeyError
-    for key in sa_rewards:
+def average(sa_counts, sa_returns, save=False):
+    # Ensure all keys in sa_returns are in sa_counts to avoid KeyError
+    for key in sa_returns:
         if key not in sa_counts:
-            raise KeyError(f"Key {key} found in sa_rewards but not in sa_counts.")
+            raise KeyError(f"Key {key} found in sa_returns but not in sa_counts.")
         if sa_counts[key] == 0:
             raise ValueError(f"Count for key {key} is zero, cannot divide by zero.")
 
     # Create a new dictionary with the results of the division
-    sa_average = {key: sa_rewards[key] / sa_counts[key] for key in sa_rewards}
+    sa_average = {key: sa_returns[key] / sa_counts[key] for key in sa_returns}
     
     # Sort the dictionary by state
     sorted_sa_average = sorted(sa_average.items(), key=lambda x: x[0][0])
     
-    # count the percentage of rewards that are zero, and then print that number
+    # count the percentage of returns that are zero, and then print that number
     total_entries = len(sa_average)
     zero_entries = sum(1 for value in sa_average.values() if value == 0)
     zero_percentage = (zero_entries / total_entries) * 100
@@ -152,7 +245,7 @@ def average(sa_counts, sa_rewards, save=False):
         
     return sa_average
 
-def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file, new_epsilon) -> float:
+def test_policy(episodes: int, market_params: tuple, q_table: DefaultDict, file, epsilon) -> dict:
 
     updated_market_params = list(market_params)    
     # if file == 'q_table_buyer.csv':
@@ -160,7 +253,7 @@ def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file, ne
     #     updated_market_params[3]['buyers'][0][2]['epsilon'] = 0.0                           # No exploring
     # elif file == 'q_table_seller.csv':
     updated_market_params[3]['sellers'][1][2]['q_table_seller'] = 'q_table_seller.csv'
-    updated_market_params[3]['sellers'][1][2]['epsilon'] = new_epsilon                          # No exploring
+    updated_market_params[3]['sellers'][1][2]['epsilon'] = epsilon                          # No exploring
 
     # initialize an empty dictionary to store cumulative average profit
     cumulative_stats = {}
@@ -199,144 +292,39 @@ def evaluate(episodes: int, market_params: tuple, q_table: DefaultDict, file, ne
     return cumulative_stats
 
 
-def train(total_eps: int, market_params: tuple, eval_freq: int, epsilon_start: float) -> DefaultDict:
-    GPI_iter = 0
-    new_epsilon = epsilon_start
-    print(f"Starting GPI iteration {GPI_iter}")
-    sa_counts = defaultdict(lambda: 0)
-    sa_rewards = defaultdict(lambda: 0)
-    for episode in range(1, total_eps + 1):
-        new_MC_iteration = False
-        market_session(*market_params)
-        
-        # Check if there's a sell trader
-        try:
-            file = 'episode_seller.csv'
-            obs_list, action_list, reward_list = load_episode_data(file)
-        except Exception as e:
-            print(f"Error loading seller episode {episode}: {e}")
-            pass
-        
-            # update the count and rewards
-        try:
-            sa_counts, sa_rewards = learn(obs_list, action_list, reward_list, 'Seller', sa_counts, sa_rewards)
-        except Exception as e:
-            print(f"Error computing new count and rewards for seller episode {episode}: {e}")
-            pass
-
-        if episode % M == 0: 
-            # Save sa_counts to a CSV file with the episode number in the filename
-            sa_counts_filename = f'sa_counts_episode_{episode}.csv'
-            save_sa_counts_to_csv(sa_counts, sa_counts_filename)
-            # divide the q_table by number of times each state visited and save it to a csv file name q_table_seller.csv
-            save = True
-            average(sa_counts, sa_rewards, save)
-            market_params[3]['sellers'][1][2]['q_table_seller'] = 'q_table_seller.csv'
-            # save the sellers q_table file for the past Monte Carlo iterations
-            new_file_name = f'q_table_seller_after_episode_{episode}.csv'
-            shutil.copy('q_table_seller.csv', new_file_name)  
-            # restart the counts and rewards for the next Monte Carlo iterations
-            sa_counts = defaultdict(lambda: 0)
-            sa_rewards = defaultdict(lambda: 0)
-            GPI_iter += 1
-            print(f"Starting GPI iteration {GPI_iter}")
-            new_MC_iteration = True
-        
-        
-        # Get some file logs every now and again
-        if episode % 2000 == 0:
-            # save the sellers dictionary
-            # new_file_name = f'q_sa_count_episode_num_{episode}.csv'
-            # save_dict_to_csv(new_file_name, sa_counts)
-            # new_file_name = f'q_sa_reward_episode_num_{episode}.csv'
-            # save_dict_to_csv(new_file_name, sa_rewards)
-            # Save the sellers q_table file
-            # new_file_name = f'q_table_seller_episode_num_{episode}.csv'
-            # shutil.copy('q_table_seller.csv', new_file_name)
-            # # save the sellers episode file
-            # new_file_name = f'episode_seller_episode_num_{episode}.csv'
-            # shutil.copy('episode_seller.csv', new_file_name) 
-            # see if q_table is converging
-            if not new_MC_iteration:
-                save = False
-                current_qtable = average(sa_counts, sa_rewards, save)
-                if 'previous_qtable' in locals():
-                    total_difference = 0
-                    
-                    for key in current_qtable:
-                        
-                        previous_value = previous_qtable.get(key, 0)
-                        total_difference += abs(current_qtable[key] - previous_value)
-                    
-                    # Print or log the total difference
-                    print(f"Total difference after episode {episode}: {total_difference}")
-                    
-                # save q_table
-                previous_qtable = current_qtable
-            
-        
-        # Perform evaluation every `eval_freq` episodes
-        if episode % eval_freq == 0:
-            print(f"Evaluating after Training Episode {episode}/{total_eps}")
-            
-            
-            cumulative_stats = evaluate(
-            episodes=CONFIG['eval_episodes'], market_params=market_params, 
-            q_table='q_table_seller.csv', file='episode_seller.csv', new_epsilon = new_epsilon)
-            
-            
-            for ttype in cumulative_stats:
-                print(f"EVALUATION: EP {episode}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
-                
-                
-            # update epsilon 
-            new_epsilon = epsilon_decay('linear', GPI_iter, number_of_policy_improvements, epsilon_start, 0.05)
-            market_params[3]['sellers'][1][2]['epsilon'] = new_epsilon
-            print(f"New epsilon: {new_epsilon}")
-            
-    return 5
-
-M = 300 # number of episodes for monte carlo
-number_of_policy_improvements = 10
-CONFIG = {
-    "total_eps": number_of_policy_improvements*M,
-    "eval_freq": M,
-    "eval_episodes": 2000,
-    "gamma": 0.0,
-    "epsilon": 0.5,
-}
-
-# Define market parameters
-sess_id = 'session_1'
-start_time = 0.0
-end_time = 30.0
-
-sellers_spec = [('GVWY',19), ('RL', 1, {'epsilon': CONFIG['epsilon']})]
-buyers_spec = [('GVWY',20)]
-
-trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
-
-range1 = (1, 3)
-supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
-
-range2 = (1, 3)
-demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
-
-# new customer orders arrive at each trader approx once every order_interval seconds
-order_interval = 30
-
-order_schedule = {'sup': supply_schedule, 'dem': demand_schedule,
-                'interval': order_interval, 'timemode': 'drip-fixed'}
-
-dump_flags = {'dump_strats': True, 'dump_lobs': True, 'dump_avgbals': True, 'dump_tape': True, 'dump_blotters': True}
-verbose = False
 
 
-# Training the RL agent with evaluation
-q_table = train(total_eps=CONFIG['total_eps'], 
-                market_params=(sess_id, start_time, end_time, trader_spec, order_schedule, dump_flags, verbose), 
-                eval_freq=CONFIG['eval_freq'],
+# Training the RL agent with testing
+saved_stats = train(total_eps=CONFIG['total_eps'], 
+                market_params=CONFIG['market_params'], 
+                test_freq=CONFIG['test_freq'],
                 epsilon_start=CONFIG['epsilon'])
 
+# Do some plotting
+plot_avg_profit(saved_stats)
+    
 
-print(f"Finished with gamma equal to {gamma}")
+print(f"Finished with gamma equal to {CONFIG["gamma"]}")
+
+
+### Delete folders for next run. 
+
+# Specify the file name
+file_name = "q_table_seller.csv"
+
+# Check if the file exists before attempting to delete it
+if os.path.exists(file_name):
+    os.remove(file_name)
+    print(f"{file_name} has been deleted.")
+else:
+    print(f"{file_name} does not exist.")
+    
+# Specify the file name
+file_name = "episode_seller.csv"
+
+# Check if the file exists before attempting to delete it
+if os.path.exists(file_name):
+    os.remove(file_name)
+    print(f"{file_name} has been deleted.")
+else:
+    print(f"{file_name} does not exist.")
