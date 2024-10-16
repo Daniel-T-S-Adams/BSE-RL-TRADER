@@ -21,15 +21,27 @@ import os
 # Importing Global Parameters
 from GlobalParameters import CONFIG
 
+#### Creating the subfolders for saving results of this setup ####
 
-# Create the subfolders for saving results of this setup
 if not os.path.exists(CONFIG["q_tables"]):
     os.makedirs(CONFIG["q_tables"])
     
 if not os.path.exists(CONFIG["counts"]):
     os.makedirs(CONFIG["counts"])
     
+if not os.path.exists(CONFIG["counts"]):
+    os.makedirs(CONFIG["counts"])
+    
+# Get the path to GlobalParameters.py
+global_parameters_file = 'GlobalParameters.py'
 
+# Copy the content of GlobalParameters.py into the new file specified by CONFIG['parameters']
+with open(global_parameters_file, 'r') as source_file:
+    with open(CONFIG['parameters'], 'w') as destination_file:
+        destination_file.write(source_file.read())
+
+
+###### The functions
 
 def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: float) -> DefaultDict:
     saved_stats = [] # start a list which we will be appending. 
