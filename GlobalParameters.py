@@ -69,6 +69,7 @@ CONFIG["market_params"] = (sess_id, start_time, end_time, trader_spec, order_sch
 CONFIG['q_tables'] =  os.path.join(CONFIG["setup"], 'q_tables')
 CONFIG['counts'] =  os.path.join(CONFIG["setup"], 'counts')
 CONFIG['plots'] =  os.path.join(CONFIG["setup"], 'plots')
+CONFIG['parameters'] =  os.path.join(CONFIG["setup"], 'parameters')
 
 # Currently not in use 
 ### file paths
