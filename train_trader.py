@@ -21,25 +21,6 @@ import os
 # Importing Global Parameters
 from GlobalParameters import CONFIG
 
-#### Creating the subfolders for saving results of this setup ####
-
-if not os.path.exists(CONFIG["q_tables"]):
-    os.makedirs(CONFIG["q_tables"])
-    
-if not os.path.exists(CONFIG["counts"]):
-    os.makedirs(CONFIG["counts"])
-    
-if not os.path.exists(CONFIG["counts"]):
-    os.makedirs(CONFIG["counts"])
-    
-# Get the path to GlobalParameters.py
-global_parameters_file = 'GlobalParameters.py'
-
-# Copy the content of GlobalParameters.py into the new file specified by CONFIG['parameters']
-with open(global_parameters_file, 'r') as source_file:
-    with open(CONFIG['parameters'], 'w') as destination_file:
-        destination_file.write(source_file.read())
-
 
 ###### The functions
 
@@ -166,7 +147,7 @@ def update_cumulative_average_profit(cumulative_stats, new_stats):
             }
 
 
-
+# This takes a file name for a CSV file, containing the episode data, state,action,reward. It reads this file converts to lists
 def load_episode_data(file: str) -> Tuple[List, List, List]:
     obs_list, action_list, reward_list = [], [], []
 
@@ -306,37 +287,3 @@ def test_policy(episodes: int, market_params: tuple, q_table: DefaultDict, file,
 
 
 
-# Training the RL agent with testing
-saved_stats = train(total_eps=CONFIG['total_eps'], 
-                market_params=CONFIG['market_params'], 
-                test_freq=CONFIG['test_freq'],
-                epsilon_start=CONFIG['epsilon'])
-
-# Do some plotting
-plot_avg_profit(saved_stats)
-    
-
-print(f"Finished with gamma equal to {CONFIG["gamma"]}")
-
-
-### Delete folders for next run. 
-
-# Specify the file name
-file_name = "q_table_seller.csv"
-
-# Check if the file exists before attempting to delete it
-if os.path.exists(file_name):
-    os.remove(file_name)
-    print(f"{file_name} has been deleted.")
-else:
-    print(f"{file_name} does not exist.")
-    
-# Specify the file name
-file_name = "episode_seller.csv"
-
-# Check if the file exists before attempting to delete it
-if os.path.exists(file_name):
-    os.remove(file_name)
-    print(f"{file_name} has been deleted.")
-else:
-    print(f"{file_name} does not exist.")

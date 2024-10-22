@@ -25,12 +25,13 @@ def plot_avg_profit(saved_stats):
     plt.title('Average Profit per Trader Type Over GPI Iterations')
     plt.legend(title='Trader Type')
     
-    if not os.path.exists(CONFIG["plots"]):
-        os.makedirs(CONFIG["plots"])
-    
     # Save the plot to the Plots_Folder directory
     plot_filename = os.path.join(CONFIG["plots"], 'Profits.png')
     plt.savefig(plot_filename)
     
     # Show the plot
     plt.show()
+    
+    
+def create_plots(saved_stats):
+    plot_avg_profit(saved_stats)
