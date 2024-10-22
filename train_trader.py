@@ -5,12 +5,7 @@ from tqdm import tqdm
 from BSE import market_session
 from collections import defaultdict
 from typing import List, Dict, DefaultDict, Tuple
-from q_table_data import load_q_table, dump_q_table, update_q_table
 from epsilon_scheduling import epsilon_decay
-
-# Plotting
-from matplotlib import pyplot as plt
-from Plotting import plot_avg_profit
 
 #file handling
 from typing import List, Tuple
@@ -21,6 +16,7 @@ import os
 # Importing Global Parameters
 from GlobalParameters import CONFIG
 
+from Test_Policies import test_policy
 
 ###### The functions
 
@@ -81,86 +77,28 @@ def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: f
             market_params[3]['sellers'][1][2]['epsilon'] = epsilon
             print(f"New epsilon: {epsilon}")
             
-            
             GPI_iter += 1
             print(f"Starting GPI iteration {GPI_iter}")
-        
-        # Perform a test of these policies performance every `test_freq` episodes
-        if episode % test_freq == 0:
-            print(f"Testing the Performance after GPI iteration {GPI_iter}")
             
             
-            cumulative_stats = test_policy(
-            episodes=CONFIG['test_episodes'], market_params=market_params, 
-            q_table='q_table_seller.csv', file='episode_seller.csv', epsilon = old_epsilon)
+        # ##WORK IN PROGRESS.
+        # # We might not need to test throughout training we leave here just in case
+        # # Perform a test of these policies performance every `test_freq` episodes
+        # if episode % test_freq == 0:
+        #     print(f"Testing the Performance after GPI iteration {GPI_iter - 1}")
             
             
-            for ttype in cumulative_stats:
-                print(f"Performance Test: GPI Iter {GPI_iter}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
+        #     cumulative_stats = test_policy(
+        #     episodes=CONFIG['test_episodes'], market_params=market_params, 
+        #     q_table_string = CONFIG['setup'] + f'\\q_tables\\q_table_seller_after_GPI_{GPI_iter - 1}.csv',  epsilon = old_epsilon)
+            
+            
+        #     for ttype in cumulative_stats:
+        #         print(f"Performance Test: GPI Iter {GPI_iter - 1}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
                 
-            saved_stats.append(cumulative_stats)
-            
-    return saved_stats # saved stats is a list of dictionaries one for each GPI iteration. 
+        #     saved_stats.append(cumulative_stats)      
+    return  
 
-   
-
-
-def read_average_profit(file_path):
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-
-    # Get the final line
-    final_line = lines[-1]
-
-    # Split the final line into components
-    components = final_line.strip().split(', ')
-
-    # Initialize an empty dictionary to store trader stats
-    trader_stats = {}
-    # Skip the first four components (sesid, time, best bid, best offer)
-    index = 4
-    # Iterate over the components to extract trader stats
-    while index < len(components):
-        ttype = components[index]
-        total_profit = float(components[index + 1])
-        num_traders = int(components[index + 2])
-        # Clean up the string before converting to float by removing commas
-        avg_profit = float(components[index + 3].replace(',', ''))
-        trader_stats[ttype] = {
-            'total_profit': total_profit,
-            'num_traders': num_traders,
-            'avg_profit': avg_profit
-        }
-        index += 4
-
-    return trader_stats
-
-def update_cumulative_average_profit(cumulative_stats, new_stats):
-    for ttype, stats in new_stats.items():
-        if ttype in cumulative_stats:
-            cumulative_stats[ttype]['avg_profit'] += stats['avg_profit']
-        else:
-            cumulative_stats[ttype] = {
-                'total_profit': stats['total_profit'],
-                'num_traders': stats['num_traders'],
-                'avg_profit': stats['avg_profit']
-            }
-
-
-# This takes a file name for a CSV file, containing the episode data, state,action,reward. It reads this file converts to lists
-def load_episode_data(file: str) -> Tuple[List, List, List]:
-    obs_list, action_list, reward_list = [], [], []
-
-    with open(file, 'r') as f:
-        reader = csv.reader(f)
-        next(reader)  # Skip the header
-        for row in reader:
-            obs_str = row[0].strip('()').split(", ")[1:]
-            obs_list.append(np.array([float(x.strip("'")) for x in obs_str]))        # Convert the string values to floats
-            action_list.append((float(row[1])))
-            reward_list.append(float(row[2]))
-
-    return obs_list, action_list, reward_list
 
 
 
@@ -238,52 +176,19 @@ def average(sa_counts, sa_returns, save=False):
         
     return sa_average
 
-def test_policy(episodes: int, market_params: tuple, q_table: DefaultDict, file, epsilon) -> dict:
 
-    updated_market_params = list(market_params)    
-    # if file == 'q_table_buyer.csv':
-    #     updated_market_params[3]['buyers'][0][2]['q_table_buyer'] = 'q_table_buyer.csv'
-    #     updated_market_params[3]['buyers'][0][2]['epsilon'] = 0.0                           # No exploring
-    # elif file == 'q_table_seller.csv':
-    updated_market_params[3]['sellers'][1][2]['q_table_seller'] = 'q_table_seller.csv'
-    updated_market_params[3]['sellers'][1][2]['epsilon'] = epsilon                          # No exploring
+# This takes a file name for a CSV file, containing the episode data, state,action,reward. It reads this file converts to lists
+def load_episode_data(file: str) -> Tuple[List, List, List]:
+    obs_list, action_list, reward_list = [], [], []
 
-    # initialize an empty dictionary to store cumulative average profit
-    cumulative_stats = {}
-    # for storing previous profit
-    previous_avg_profit = None
-    for episode in range(episodes):
-        # Run the market session
-        market_session(*updated_market_params)
-        # Read the average profit file at the final timestep of each market session
-        current_stats = read_average_profit('session_1_avg_balance.csv')
-        # getting a cumulative tally of the average profit for each trader type 
-        update_cumulative_average_profit(cumulative_stats, current_stats)
+    with open(file, 'r') as f:
+        reader = csv.reader(f)
+        next(reader)  # Skip the header
+        for row in reader:
+            obs_str = row[0].strip('()').split(", ")[1:]
+            obs_list.append(np.array([float(x.strip("'")) for x in obs_str]))        # Convert the string values to floats
+            action_list.append((float(row[1])))
+            reward_list.append(float(row[2]))
 
-        # Calculate average profit for the current episode
-        current_avg_profit = sum([cumulative_stats[ttype]['avg_profit'] for ttype in cumulative_stats])/(episode+1)
-        # Check for convergence every 100 steps
-        if episode % 100 == 0:
-            if previous_avg_profit is not None:
-                profit_change = abs(current_avg_profit - previous_avg_profit)
-                if profit_change <= 0.00005:
-                    print(f"Convergence achieved at episode {episode} with profit change {profit_change}")
-                    # get the average over all episodes
-                    for ttype in cumulative_stats:
-                        cumulative_stats[ttype]['avg_profit'] /= (episode+1)
-                    return cumulative_stats
-            
-            if episode % 100 == 0 or episode == 0:
-                previous_avg_profit = current_avg_profit
-       
-    # get the average over all episodes if we dont converge
-    print(f"Did not converge after {episodes} episodes")
-    for ttype in cumulative_stats:
-        cumulative_stats[ttype]['avg_profit'] /= episodes
-        
-       
-    return cumulative_stats
-
-
-
+    return obs_list, action_list, reward_list
 
