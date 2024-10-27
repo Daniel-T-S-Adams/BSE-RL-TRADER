@@ -91,8 +91,7 @@ def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: f
             
             
             cumulative_stats = test_policy(
-            episodes=CONFIG['test_episodes'], market_params=market_params, 
-            q_table='q_table_seller.csv', file='episode_seller.csv', epsilon = old_epsilon)
+            episodes=CONFIG['test_episodes'], market_params=market_params, epsilon = old_epsilon, file_path = f'q_table_seller_after_GPI_{GPI_iter}.csv')
             
             
             for ttype in cumulative_stats:
@@ -238,7 +237,7 @@ def average(sa_counts, sa_returns, save=False):
         
     return sa_average
 
-def test_policy(episodes: int, market_params: tuple, q_table: DefaultDict, file, epsilon) -> dict:
+def test_policy(episodes: int, market_params: tuple, epsilon, file_path) -> dict:
 
     updated_market_params = list(market_params)    
     # if file == 'q_table_buyer.csv':
