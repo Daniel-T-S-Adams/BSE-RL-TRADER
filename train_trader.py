@@ -82,8 +82,7 @@ def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: f
             print(f"New epsilon: {epsilon}")
             
             
-            GPI_iter += 1
-            print(f"Starting GPI iteration {GPI_iter}")
+        
         
         # Perform a test of these policies performance every `test_freq` episodes
         if episode % test_freq == 0:
@@ -91,13 +90,18 @@ def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: f
             
             
             cumulative_stats = test_policy(
-            episodes=CONFIG['test_episodes'], market_params=market_params, epsilon = old_epsilon, file_path = f'q_table_seller_after_GPI_{GPI_iter}.csv')
+            episodes=CONFIG['test_episodes'], market_params=market_params, epsilon = old_epsilon, file_path = f"setup_1\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv")
             
             
             for ttype in cumulative_stats:
                 print(f"Performance Test: GPI Iter {GPI_iter}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
                 
             saved_stats.append(cumulative_stats)
+            
+            
+        if episode % CONFIG["eps_per_evaluation"] == 0:
+            GPI_iter += 1
+            print(f"Starting GPI iteration {GPI_iter}")
             
     return saved_stats # saved stats is a list of dictionaries one for each GPI iteration. 
 
@@ -244,7 +248,7 @@ def test_policy(episodes: int, market_params: tuple, epsilon, file_path) -> dict
     #     updated_market_params[3]['buyers'][0][2]['q_table_buyer'] = 'q_table_buyer.csv'
     #     updated_market_params[3]['buyers'][0][2]['epsilon'] = 0.0                           # No exploring
     # elif file == 'q_table_seller.csv':
-    updated_market_params[3]['sellers'][1][2]['q_table_seller'] = 'q_table_seller.csv'
+    updated_market_params[3]['sellers'][1][2]['q_table_seller'] = file_path
     updated_market_params[3]['sellers'][1][2]['epsilon'] = epsilon                          # No exploring
 
     # initialize an empty dictionary to store cumulative average profit

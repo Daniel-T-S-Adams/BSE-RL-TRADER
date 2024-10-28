@@ -11,6 +11,7 @@ CONFIG = {
     # Parameters for the Agent 
     "eps_per_evaluation": 500,
     "num_GPI_iter": 5,
+    "GPI_test_freq": 1,
     "test_episodes": 500,
     "gamma": 0.3,
     "epsilon": 1.0,
