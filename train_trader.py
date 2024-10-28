@@ -7,6 +7,7 @@ from collections import defaultdict
 from typing import List, Dict, DefaultDict, Tuple
 from q_table_data import load_q_table, dump_q_table, update_q_table
 from epsilon_scheduling import epsilon_decay
+import ast
 
 # Plotting
 from matplotlib import pyplot as plt
@@ -64,11 +65,11 @@ def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: f
             average(sa_counts, sa_returns, save)
             
             # Save the sellers q_table file for this GPI_iter (to keep track)
-            new_file_name = os.path.join(CONFIG["q_tables"],f'q_table_seller_after_GPI_{GPI_iter}.csv')
+            new_file_name = os.path.join(CONFIG["q_tables"], f'q_table_seller_after_GPI_{GPI_iter}.csv')
             shutil.copy('q_table_seller.csv', new_file_name)  
             
             # Save sa_counts to a CSV file for this GPI_iter (to keep track)
-            sa_counts_filename = os.path.join(CONFIG["counts"],f'sa_counts_after_GPI_{GPI_iter}.csv')
+            sa_counts_filename = os.path.join(CONFIG["counts"], f'sa_counts_after_GPI_{GPI_iter}.csv')
             save_sa_counts_to_csv(sa_counts, sa_counts_filename)
             
             # Restart the counts and returns for the next iteration of policy evalutation
@@ -77,33 +78,17 @@ def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: f
             
             # Update epsilon for the next iteration of policy evaluation
             old_epsilon = epsilon   # save incase we want to test this policy  
-            epsilon = epsilon_decay('linear', GPI_iter, CONFIG["num_GPI_iter"], epsilon_start, 0.05)
+            epsilon = epsilon_decay('linear', GPI_iter, CONFIG["num_GPI_iter"], epsilon_start, CONFIG["epsilon_min"])
             market_params[3]['sellers'][1][2]['epsilon'] = epsilon
             print(f"New epsilon: {epsilon}")
             
-            
-        
-        
-        # Perform a test of these policies performance every `test_freq` episodes
-        if episode % test_freq == 0:
-            print(f"Testing the Performance after GPI iteration {GPI_iter}")
-            
-            
-            cumulative_stats = test_policy(
-            episodes=CONFIG['test_episodes'], market_params=market_params, epsilon = old_epsilon, file_path = f"setup_1\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv")
-            
-            
-            for ttype in cumulative_stats:
-                print(f"Performance Test: GPI Iter {GPI_iter}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
-                
-            saved_stats.append(cumulative_stats)
             
             
         if episode % CONFIG["eps_per_evaluation"] == 0:
             GPI_iter += 1
             print(f"Starting GPI iteration {GPI_iter}")
             
-    return saved_stats # saved stats is a list of dictionaries one for each GPI iteration. 
+    return  
 
    
 
@@ -151,17 +136,27 @@ def update_cumulative_average_profit(cumulative_stats, new_stats):
 
 
 # This takes a file name for a CSV file, containing the episode data, state,action,reward. It reads this file converts to lists
-def load_episode_data(file: str) -> Tuple[List, List, List]:
+def load_episode_data(file: str) -> Tuple[List[Tuple], List[float], List[float]]:
     obs_list, action_list, reward_list = [], [], []
 
     with open(file, 'r') as f:
         reader = csv.reader(f)
         next(reader)  # Skip the header
-        for row in reader:
-            obs_str = row[0].strip('()').split(", ")[1:]
-            obs_list.append(np.array([float(x.strip("'")) for x in obs_str]))        # Convert the string values to floats
-            action_list.append((float(row[1])))
-            reward_list.append(float(row[2]))
+        for row_number, row in enumerate(reader, start=1):
+            try:
+                # Safely evaluate the Observation string to a tuple
+                obs = ast.literal_eval(row[0])
+                if not isinstance(obs, tuple):
+                    raise ValueError(f"Observation at row {row_number} is not a tuple.")
+
+                obs_list.append(obs)
+
+                # Convert Action and Reward to float
+                action_list.append(float(row[1]))
+                reward_list.append(float(row[2]))
+            except Exception as e:
+                print(f"Error processing row {row_number}: {e}")
+                continue  # Skip problematic rows
 
     return obs_list, action_list, reward_list
 

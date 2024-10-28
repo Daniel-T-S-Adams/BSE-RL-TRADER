@@ -10,10 +10,12 @@ CONFIG = {
     
     # Parameters for the Agent 
     "eps_per_evaluation": 500,
-    "num_GPI_iter": 5,
+    "num_GPI_iter": 6,
+    "GPI_test_freq": 1,
     "test_episodes": 500,
     "gamma": 0.3,
     "epsilon": 1.0,
+    "epsilon_min": 0.05,
     "no._of_bins": 5,
     
     # Parameters for the BSE

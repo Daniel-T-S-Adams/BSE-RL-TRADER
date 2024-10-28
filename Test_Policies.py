@@ -10,12 +10,9 @@ from Plotting import create_plots
 from epsilon_scheduling import epsilon_decay
 
 # The following function takes a q_table and a number of epiodes to test that policy for.
-def test_policy(episodes: int, market_params: tuple, q_table_string: str, eps :float) -> dict:
+def test_policy(episodes: int, market_params: tuple) -> dict:
 
     updated_market_params = list(market_params)    
-    updated_market_params[3]['sellers'][1][2]['q_table_seller'] = q_table_string
-    updated_market_params[3]['sellers'][1][2]['epsilon'] = eps     # No exploring
-    print("using q_table: ", q_table_string)    
 
     # initialize an empty dictionary to store cumulative average profit
     cumulative_stats = {}
@@ -118,13 +115,19 @@ def Test_all_policies(GPI_test_freq: int, num_GPI_iters : int, market_params: tu
     for GPI_iter in iters_to_test:
         print(f"Testing the Performance after GPI iteration {GPI_iter}")
         
-        
-        cumulative_stats = test_policy(
-        episodes=CONFIG['test_episodes'], market_params=market_params, 
-        q_table_string = CONFIG['setup'] + f'\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv', eps=epsilon)
-        epsilon = epsilon_decay('linear', GPI_iter, CONFIG["num_GPI_iter"], CONFIG['epsilon'], 0.05)
+
+        q_table_string = CONFIG['setup'] + f'\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv'
+        market_params[3]['sellers'][1][2]['q_table_seller'] = q_table_string    
         market_params[3]['sellers'][1][2]['epsilon'] = epsilon
+        print("using q_table: ", q_table_string)
+
+
+        cumulative_stats = test_policy(episodes=CONFIG['test_episodes'], market_params=market_params)
+
         
+        epsilon = epsilon_decay('linear', GPI_iter, CONFIG["num_GPI_iter"], CONFIG['epsilon'], CONFIG["epsilon_min"])
+        
+
         for ttype in cumulative_stats:
             print(f"Performance Test: GPI Iter {GPI_iter}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
             
@@ -135,5 +138,4 @@ def Test_all_policies(GPI_test_freq: int, num_GPI_iters : int, market_params: tu
 
 
 
-saved_stats = Test_all_policies(CONFIG['GPI_test_freq'], CONFIG['num_GPI_iter'], CONFIG['market_params'],CONFIG['epsilon'])
-create_plots(saved_stats)
+

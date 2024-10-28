@@ -53,6 +53,7 @@ import math
 import random
 import os
 import time as chrono
+import ast
 
 import csv
 from typing import List, Dict, DefaultDict
@@ -122,30 +123,14 @@ def get_discrete_state(type, lob, countdown, order):
     avg_bid = bin_average(calc_average_price(lob['bids']['lob']))
     avg_ask = bin_average(calc_average_price(lob['asks']['lob']))
     order = bin_average(order)
-    
+    # Map type to a numeric code
+    type_code = 1 if type == 'Seller' else 0  # Adjust as needed for other types
+
     if not (0 <= countdown <= 1):
         raise ValueError("countdown should be between 0 and 1 inclusive.")
     
-    # # Calculate the bin width
-    # bin_width = 1 / 10
-    
-    # # Determine the bin index
-    # bin_index = int(countdown // bin_width)
-    # bin_index = float(bin_index)
-    
-    # # Handle the edge case where value is exactly 1
-    # if bin_index == 10.0:
-    #     bin_index -= 1.0
-    # observation = np.array([type, float(int(time)), float(order), 
-    #                         float(best_bid), float(best_ask), float(worst_bid), 
-    #                         float(worst_ask), float(avg_bid), float(avg_ask)])
-
-    # observation = np.array([type, float(order), float(best_bid), float(best_ask), float(worst_bid), 
-    #                         float(worst_ask), float(avg_bid), float(avg_ask)])
-
-    #observation = np.array([type , float(order),  bin_index, float(best_bid), float(best_ask)])
-    observation = np.array([type , float(order),  float(best_bid), float(best_ask)])
-    #observation = np.array([float(order),  float(best_bid), float(best_ask)])
+    # create as a tuple
+    observation = (type_code, float(order), float(best_bid), float(best_ask))
     
     return observation
 
@@ -1931,44 +1916,34 @@ class RLAgent(Trader):
             writer.writerow(['Observation', 'Action', 'Reward'])
 
     @classmethod
-    def load_q_table(self, file_path: str) -> DefaultDict:
-        """
-        Takes in a Q-table as a csv file and returns this information
-        as a dictionary that is indexed by each state-action pair.
-
-        :param file_path (str): The path to the file where the Q-table can be found.
-        """
-        q_table = defaultdict(lambda: 0)
+    def load_q_table(self, file_path: str) -> DefaultDict[tuple, float]:
+    
+        q_table = defaultdict(lambda: 0.0)
 
         try:
             with open(file_path, 'r', newline='') as f:
                 reader = csv.reader(f)
                 next(reader)  # Skip the header
+
                 for row in reader:
-                    state, action, q_value = row
-                    action = float(action) # convert action to float to match the observation (in get order)
-                    
-                    # Now we convert the state to the correct format to match the observation (in get order)
-                    
-                    # Extract the string representing the tuple and the action
-                    state_str = state
-                    # Convert the string to a list of strings (remove parentheses and split by ', ')
-                    string_tuple = tuple(state_str.strip('()').split(', '))
-                    # Inject 'Seller' at the beginning
-                    new_tuple = ('Seller',) + string_tuple
-                    # Combine with the original action
-                    new_state = (new_tuple, action)
-                    q_table[new_state] = float(q_value)
-                    
-                   
-                    
+                    state_str, action, q_value = row
+
+                    # Parse state string as a tuple
+                    state = ast.literal_eval(state_str)  # Converts string to tuple
+
+                    # Convert action and q_value to floats
+                    action = float(action)
+                    q_value = float(q_value)
+
+                    # Create state-action pair as the dictionary key
+                    state_action_pair = (state, action)
+                    q_table[state_action_pair] = q_value
+
         except FileNotFoundError:
             print(f"File not found at {file_path}")
-            pass  # If the file does not exist, return an empty q_table
-
+        
         return q_table
 
-    
     def getorder(self, time, countdown, lob):     
         if self.type == 'Buyer':
                 file = 'episode_buyer.csv'
@@ -1983,7 +1958,7 @@ class RLAgent(Trader):
         else:
             order_type = self.orders[0].otype
             # return the best action following an epsilon-greedy policy
-            obs = tuple(get_discrete_state(self.type, lob, countdown, self.orders[0].price))
+            obs = get_discrete_state(self.type, lob, countdown, self.orders[0].price)
             # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
                 
@@ -2004,7 +1979,7 @@ class RLAgent(Trader):
                     quote = self.orders[0].price * (1 - profit)
                 elif self.type == 'Seller':
                     # Step 1: Find the range of admissible actions for the customer price and BSE limits
-                    admissible_actions = [x for x in self.action_space and range(bse_sys_maxprice - int(self.orders[0].price) + 1)]
+                    admissible_actions = [x for x in self.action_space if x in range(bse_sys_maxprice - int(self.orders[0].price) + 1)]
                     # Step 2: Calculate the maximum Q-value for the given observation
                     max_q_value = max(self.q_table[(obs, x)] for x in admissible_actions)
                     # Step 3: Find all actions that have this maximum Q-value

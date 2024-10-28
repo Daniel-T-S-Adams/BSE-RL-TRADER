@@ -71,4 +71,3 @@ def dump_q_table(q_table: DefaultDict, file_path: str):
 # q_table = defaultdict(lambda: 0, {((1.0, 2.0), 3.0): 0.5, ((1.0, 1.0), 1.0): 0.1})
 # update_q_table(q_table, old_q_table)
 # dump_q_table(q_table, 'q_table_seller.csv')
-
