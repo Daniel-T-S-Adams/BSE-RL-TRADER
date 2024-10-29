@@ -118,7 +118,7 @@ def Test_all_policies(GPI_test_freq: int, num_GPI_iters : int, market_params: tu
 
         q_table_string = CONFIG['setup'] + f'\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv'
         market_params[3]['sellers'][1][2]['q_table_seller'] = q_table_string    
-        market_params[3]['sellers'][1][2]['epsilon'] = epsilon
+        market_params[3]['sellers'][1][2]['epsilon'] = 0.0
         print("using q_table: ", q_table_string)
 
 

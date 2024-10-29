@@ -6,16 +6,17 @@ import os
 
 CONFIG = {
     # setup ID for this configuration
-    'setup': 'setup_1',
+    'setup': 'lownumevals',
     
     # Parameters for the Agent 
-    "eps_per_evaluation": 500,
-    "num_GPI_iter": 6,
-    "GPI_test_freq": 1,
-    "test_episodes": 500,
+    "eps_per_evaluation": 1,
+    "num_GPI_iter": 100,
+    "GPI_test_freq": 5,
+    "test_episodes": 1000,
     "gamma": 0.3,
     "epsilon": 1.0,
     "epsilon_min": 0.05,
+    "alpha" : 0.1,
     "no._of_bins": 5,
     
     # Parameters for the BSE

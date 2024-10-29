@@ -35,6 +35,7 @@ print(f"Finished the Training")
 
 saved_stats = Test_all_policies(CONFIG['GPI_test_freq'], CONFIG['num_GPI_iter'], CONFIG['market_params'],CONFIG['epsilon'])
 
+
 print(f"Finished the Testing")
 
 

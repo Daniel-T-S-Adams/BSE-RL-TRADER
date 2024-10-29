@@ -1,4 +1,4 @@
-# A file that sets up the subfolders
+# A file that sets up the subfolders and deletes files.
 
 import os
 from GlobalParameters import CONFIG
