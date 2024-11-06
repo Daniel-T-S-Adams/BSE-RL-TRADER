@@ -1,68 +1,59 @@
-# A file for testing the performance of the trader. 
-# The main function takes a q_table and a number of epiodes to test that policy for.
+# A file for testing the performance of the trader.
+# The main function takes a q_table and a number of episodes to test that policy for.
 
+import logging
+logger = logging.getLogger(__name__)
 
 from BSE import market_session
 from GlobalParameters import CONFIG
 
 # Import the main function for plotting
 from Plotting import create_plots
-from epsilon_scheduling import epsilon_decay
+from epsilon_scheduling import linear_epsilon_decay
 
-# The following function takes a q_table and a number of epiodes to test that policy for.
 def test_policy(episodes: int, market_params: tuple) -> dict:
+    """
+    Test a trading policy over a specified number of episodes.
 
-    updated_market_params = list(market_params)    
+    Parameters:
+        episodes (int): Number of episodes to test the policy.
+        market_params (tuple): Parameters for the market session.
 
-    # initialize an empty dictionary to store cumulative average profit
+    Returns:
+        dict: Cumulative average profit statistics for each trader type.
+    """
+    updated_market_params = list(market_params)
+
+    # Initialize an empty dictionary to store cumulative average profit
     cumulative_stats = {}
-    # for storing previous profit
+    # For storing previous profit (unused currently)
     previous_avg_profit = None
-    
+
     for episode in range(episodes):
         # Run the market session
         market_session(*updated_market_params)
-        
-        # Read the average profit file at the final timestep of each market session. Average here is over all traders of a given type!!!
+
+        # Read the average profit file at the final timestep of each market session
+        # Average here is over all traders of a given type
         current_stats = read_average_profit('session_1_avg_balance.csv')
-        
-        
-        # getting a cumulative tally of the average profit for each trader type. Again Average here is over all traders of a given type!!! Cumulative just means 
-        # we are adding this average profit for each episode to the previous episodes.
+
+        # Update cumulative average profit
         update_cumulative_average_profit(cumulative_stats, current_stats)
 
-
-    #     ##WORK IN PROGRESS.
-    #     # CONVERGENCE CHECK. this needs to be changed to make sure each traders average profit has converged. at the moment we are just summing them.
-    #     # Calculate average profit so far. Here by average we mean averaging over all episodes so far.
-    #     current_avg_profit = sum([cumulative_stats[ttype]['avg_profit'] for ttype in cumulative_stats])/(episode+1)
-    #     # Check for convergence every 100 steps
-    #     if episode % 100 == 0:
-    #         if previous_avg_profit is not None:
-    #             profit_change = abs(current_avg_profit - previous_avg_profit)
-    #             if profit_change <= 0.00005:
-    #                 print(f"Convergence achieved at episode {episode} with profit change {profit_change}")
-    #                 # get the average over all episodes
-    #                 for ttype in cumulative_stats:
-    #                     cumulative_stats[ttype]['avg_profit'] /= (episode+1)
-    #                 return cumulative_stats
-            
-            
-    #         previous_avg_profit = current_avg_profit
-       
-    # # get the average over all episodes if we dont converge
-    # print(f"Did not converge after {episodes} episodes")
-    # ####WORK IN PROGRESS.
-    
-    # Calculate average profit for each trader type. Here by average we mean averaging over all episodes.
+    # Calculate average profit for each trader type over all episodes
     for ttype in cumulative_stats:
         cumulative_stats[ttype]['avg_profit'] /= episodes
-        
-       
+
     return cumulative_stats
 
-
 def update_cumulative_average_profit(cumulative_stats, new_stats):
+    """
+    Update cumulative average profit statistics with new episode data.
+
+    Parameters:
+        cumulative_stats (dict): Cumulative statistics to update.
+        new_stats (dict): New statistics from the current episode.
+    """
     for ttype, stats in new_stats.items():
         if ttype in cumulative_stats:
             cumulative_stats[ttype]['avg_profit'] += stats['avg_profit']
@@ -73,8 +64,16 @@ def update_cumulative_average_profit(cumulative_stats, new_stats):
                 'avg_profit': stats['avg_profit']
             }
 
-
 def read_average_profit(file_path):
+    """
+    Read average profit data from a CSV file.
+
+    Parameters:
+        file_path (str): Path to the CSV file.
+
+    Returns:
+        dict: Trader statistics extracted from the file.
+    """
     with open(file_path, 'r') as file:
         lines = file.readlines()
 
@@ -104,38 +103,38 @@ def read_average_profit(file_path):
 
     return trader_stats
 
+def Test_all_policies(GPI_test_freq: int, num_GPI_iters: int, market_params: tuple) -> list:
+    """
+    Test the performance of policies after specified GPI iterations.
 
-# The following function tests the performance of the policies for specified GPI iterations
-def Test_all_policies(GPI_test_freq: int, num_GPI_iters : int, market_params: tuple, epsilon : float) -> list:
-    # test the performance for the following GPI iterations
-    iters_to_test = list(range(1, num_GPI_iters+1, GPI_test_freq))
-    
-    
+    Parameters:
+        GPI_test_freq (int): Frequency of GPI iterations to test.
+        num_GPI_iters (int): Total number of GPI iterations.
+        market_params (tuple): Parameters for the market session.
+
+    Returns:
+        list: A list of dictionaries containing cumulative stats for each tested GPI iteration.
+    """
+    # Test the performance for the specified GPI iterations
+    iters_to_test = list(range(1, num_GPI_iters + 1, GPI_test_freq))
+
     saved_stats = []
     for GPI_iter in iters_to_test:
-        print(f"Testing the Performance after GPI iteration {GPI_iter}")
-        
+        logger.info(f"Testing the performance after GPI iteration {GPI_iter}")
 
         q_table_string = CONFIG['setup'] + f'\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv'
-        market_params[3]['sellers'][1][2]['q_table_seller'] = q_table_string    
+        market_params[3]['sellers'][1][2]['q_table_seller'] = q_table_string
         market_params[3]['sellers'][1][2]['epsilon'] = 0.0
-        print("using q_table: ", q_table_string)
-
+        logger.info(f"Using q_table: {q_table_string}")
 
         cumulative_stats = test_policy(episodes=CONFIG['test_episodes'], market_params=market_params)
 
-        
-        epsilon = epsilon_decay('linear', GPI_iter, CONFIG["num_GPI_iter"], CONFIG['epsilon'], CONFIG["epsilon_min"])
-        
-
+        # Log the performance statistics
         for ttype in cumulative_stats:
-            print(f"Performance Test: GPI Iter {GPI_iter}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
-            
+            logger.info(f"Performance Test: GPI Iter {GPI_iter}, {ttype} average profit: {cumulative_stats[ttype]['avg_profit']}")
+
         saved_stats.append(cumulative_stats)
-    
-    return saved_stats # saved stats is a list of dictionaries one for each GPI iteration.
 
-
-
+    return saved_stats  # saved_stats is a list of dictionaries, one for each GPI iteration.
 
 

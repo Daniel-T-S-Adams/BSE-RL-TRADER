@@ -6,12 +6,10 @@ from BSE import market_session
 from collections import defaultdict
 from typing import List, Dict, DefaultDict, Tuple
 from q_table_data import load_q_table, dump_q_table, update_q_table
-from epsilon_scheduling import epsilon_decay
+from epsilon_scheduling import linear_epsilon_decay
 import ast
 
-
-#file handling
-from typing import List, Tuple
+# File handling
 import shutil
 import csv
 import os
@@ -19,17 +17,29 @@ import os
 # Importing Global Parameters
 from GlobalParameters import CONFIG
 
+# Import the logging module and create a module-level logger
+import logging
+logger = logging.getLogger(__name__)
 
 ###### The functions
 
-def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: float) -> DefaultDict:
-     
-     
+def train(total_eps: int, market_params: tuple, epsilon_start: float) -> DefaultDict:
+    """
+    Train the RL agent over a specified number of episodes.
+
+    Parameters:
+        total_eps (int): Total number of episodes to train.
+        market_params (tuple): Parameters for the market session.
+        epsilon_start (float): Starting value of epsilon for exploration.
+
+    Returns:
+        DefaultDict: A default dictionary containing training results.
+    """
     ## Initialize everything: ##
     
     # Start the GPI iterations at 1 
     GPI_iter = 1
-    print(f"Starting GPI iteration {GPI_iter}")
+    logger.info(f"Starting GPI iteration {GPI_iter}")
     
     epsilon = epsilon_start
     
@@ -37,43 +47,41 @@ def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: f
     sa_counts = defaultdict(lambda: 0)
     sa_returns = defaultdict(lambda: 0)
     
-    # empty dictionary 
+    # Empty dictionary 
     Q_old = {}
     
     for episode in range(1, total_eps + 1):
         # Run the market session once, it saves a CSV file
         market_session(*market_params)
         
-        # Check if there's a sell trader, and then read the episode infomation from its CSV file
-        # note this means every episode we need to write and read a CSV
+        # Check if there's a sell trader, and then read the episode information from its CSV file
+        # Note this means every episode we need to write and read a CSV
         try:
             file = 'episode_seller.csv'
             obs_list, action_list, reward_list = load_episode_data(file)
         except Exception as e:
-            print(f"Error loading seller episode {episode}: {e}")
+            logger.error(f"Error loading seller episode {episode}: {e}")
             pass
         
         # Update the count and returns
         try:
             sa_counts, sa_returns = learn(obs_list, action_list, reward_list, sa_counts, sa_returns)
         except Exception as e:
-            print(f"Error computing new count and returns for seller episode {episode}: {e}")
+            logger.error(f"Error computing new count and returns for seller episode {episode}: {e}")
             pass
 
         # If we have done the designated number of episodes for this policy evaluation, compute the q_values i.e. q_table
         if episode % CONFIG["eps_per_evaluation"] == 0: 
-            
-            
             # Compute the Q_new by averaging 
             Q_new = average(sa_counts, sa_returns)
             # Compute the next q_table by an incremental update
             next_q_table = incremental_update(Q_new, Q_old, CONFIG["alpha"])    
-            # save this Q_table for the next increment step
+            # Save this Q_table for the next increment step
             Q_old = next_q_table
             # Save the new q_table dictionary to a CSV file named q_table_seller.csv
             save_dict_to_csv(next_q_table)
             
-            # Save the sellers q_table file for this GPI_iter (to keep track)
+            # Save the seller's q_table file for this GPI_iter (to keep track)
             new_file_name = os.path.join(CONFIG["q_tables"], f'q_table_seller_after_GPI_{GPI_iter}.csv')
             shutil.copy('q_table_seller.csv', new_file_name)  
             
@@ -81,26 +89,37 @@ def train(total_eps: int, market_params: tuple, test_freq: int, epsilon_start: f
             sa_counts_filename = os.path.join(CONFIG["counts"], f'sa_counts_after_GPI_{GPI_iter}.csv')
             save_sa_counts_to_csv(sa_counts, sa_counts_filename)
             
-            # Restart the counts and returns for the next iteration of policy evalutation
+            # Restart the counts and returns for the next iteration of policy evaluation
             sa_counts = defaultdict(lambda: 0)
             sa_returns = defaultdict(lambda: 0)
             
             # Update epsilon for the next iteration of policy evaluation
-            epsilon = epsilon_decay('linear', GPI_iter, CONFIG["num_GPI_iter"], epsilon_start, CONFIG["epsilon_min"])
+            epsilon = linear_epsilon_decay(
+                GPI_iter, 
+                CONFIG["num_GPI_iter"], 
+                epsilon_start, 
+                CONFIG["epsilon_min"], 
+                CONFIG["epsilon_decay"]
+            )
             market_params[3]['sellers'][1][2]['epsilon'] = epsilon
-            print(f"New epsilon: {epsilon}")
+            logger.info(f"New epsilon: {epsilon}")
             
-            
-            
-        if episode % CONFIG["eps_per_evaluation"] == 0:
             GPI_iter += 1
-            print(f"Starting GPI iteration {GPI_iter}")
-            
+            logger.info(f"Starting GPI iteration {GPI_iter}")
+    
     return  
 
-   
-# This takes a file name for a CSV file, containing the episode data, state,action,reward. It reads this file converts to lists
+# This takes a file name for a CSV file, containing the episode data: state, action, reward. It reads this file and converts it to lists
 def load_episode_data(file: str) -> Tuple[List[Tuple], List[float], List[float]]:
+    """
+    Load episode data from a CSV file.
+
+    Parameters:
+        file (str): The filename of the CSV file containing episode data.
+
+    Returns:
+        Tuple[List[Tuple], List[float], List[float]]: Lists of observations, actions, and rewards.
+    """
     obs_list, action_list, reward_list = [], [], []
 
     with open(file, 'r') as f:
@@ -119,14 +138,20 @@ def load_episode_data(file: str) -> Tuple[List[Tuple], List[float], List[float]]
                 action_list.append(float(row[1]))
                 reward_list.append(float(row[2]))
             except Exception as e:
-                print(f"Error processing row {row_number}: {e}")
+                logger.error(f"Error processing row {row_number}: {e}")
                 continue  # Skip problematic rows
 
     return obs_list, action_list, reward_list
 
-
 # Function to save sa_counts to a CSV file
 def save_sa_counts_to_csv(sa_counts, filename):
+    """
+    Save state-action counts to a CSV file.
+
+    Parameters:
+        sa_counts (dict): Dictionary containing state-action counts.
+        filename (str): The filename to save the counts.
+    """
     with open(filename, 'w', newline='') as csv_file:
         writer = csv.writer(csv_file)
         # Write the header
@@ -135,15 +160,33 @@ def save_sa_counts_to_csv(sa_counts, filename):
         for (state, action), count in sa_counts.items():
             writer.writerow([state, action, count])
 
+def learn(
+    obs: List[int], 
+    actions: List[int], 
+    rewards: List[float], 
+    sa_counts, 
+    sa_returns
+) -> Tuple[DefaultDict, DefaultDict]:
+    """
+    Update the counts and returns for each state-action pair based on observed trajectories.
 
-def learn(obs: List[int], actions: List[int], rewards: List[float], sa_counts, sa_returns) -> Tuple[DefaultDict, DefaultDict]:
+    Parameters:
+        obs (List[int]): List of observations (states).
+        actions (List[int]): List of actions taken.
+        rewards (List[float]): List of rewards received.
+        sa_counts (DefaultDict): State-action counts.
+        sa_returns (DefaultDict): State-action returns.
+
+    Returns:
+        Tuple[DefaultDict, DefaultDict]: Updated state-action counts and returns.
+    """
     traj_length = len(rewards)   
     
     if traj_length == 0:
         return sa_counts, sa_returns
 
     # Precompute returns G for every timestep
-    G = [ 0 for n in range(traj_length) ]
+    G = [0 for _ in range(traj_length)]
     G[-1] = rewards[-1]
     for t in range(traj_length - 2, -1, -1):
         G[t] = rewards[t] + CONFIG["gamma"] * G[t + 1] 
@@ -154,11 +197,21 @@ def learn(obs: List[int], actions: List[int], rewards: List[float], sa_counts, s
         sa_counts[state_action_pair] += 1
         sa_returns[state_action_pair] += G[t]
         
-    
     return sa_counts, sa_returns
 
-# takes in the counts and returns spits out the estimate for Q_new as a dictionary  
-def average(sa_counts, sa_returns, save=False) -> Dict :
+# Takes in the counts and returns, spits out the estimate for Q_new as a dictionary  
+def average(sa_counts, sa_returns, save=False) -> Dict:
+    """
+    Calculate the average return for each state-action pair.
+
+    Parameters:
+        sa_counts (dict): State-action counts.
+        sa_returns (dict): State-action returns.
+        save (bool): Whether to save the averages to a file (unused).
+
+    Returns:
+        Dict: Average returns for each state-action pair.
+    """
     # Ensure all keys in sa_returns are in sa_counts to avoid KeyError
     for key in sa_returns:
         if key not in sa_counts:
@@ -169,18 +222,26 @@ def average(sa_counts, sa_returns, save=False) -> Dict :
     # Create a new dictionary with the results of the division
     sa_average = {key: sa_returns[key] / sa_counts[key] for key in sa_returns}
     
-    # count the percentage of returns that are zero, and then print that number
+    # Uncomment the following lines if you want to log the percentage of zero values
     # total_entries = len(sa_average)
     # zero_entries = sum(1 for value in sa_average.values() if value == 0)
     # zero_percentage = (zero_entries / total_entries) * 100
-    # print(f"Percentage of zero values: {zero_percentage:.2f}%")
-
+    # logger.info(f"Percentage of zero values: {zero_percentage:.2f}%")
         
     return sa_average
 
-
 def incremental_update(Q_new: Dict, Q_old: Dict, alpha) -> Dict:
+    """
+    Perform an incremental update of the Q-values.
 
+    Parameters:
+        Q_new (Dict): The new Q-values.
+        Q_old (Dict): The previous Q-values.
+        alpha (float): Learning rate.
+
+    Returns:
+        Dict: Updated Q-values.
+    """
     # Initialize the merged dictionary
     next_q_table = {}
     
@@ -200,9 +261,13 @@ def incremental_update(Q_new: Dict, Q_old: Dict, alpha) -> Dict:
     
     return next_q_table
 
+def save_dict_to_csv(new_q_table: Dict):
+    """
+    Save the Q-table to a CSV file.
 
-def save_dict_to_csv(new_q_table : Dict) :
-    
+    Parameters:
+        new_q_table (Dict): The Q-table to save.
+    """
     sorted_new_q_table = sorted(new_q_table.items(), key=lambda x: x[0][0])
     
     with open('q_table_seller.csv', 'w', newline='') as file:

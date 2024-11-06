@@ -10,12 +10,13 @@ CONFIG = {
     
     # Parameters for the Agent 
     "eps_per_evaluation": 1,
-    "num_GPI_iter": 100,
-    "GPI_test_freq": 5,
-    "test_episodes": 1000,
+    "num_GPI_iter": 500,
+    "GPI_test_freq": 100,
+    "test_episodes": 900,
     "gamma": 0.3,
-    "epsilon": 1.0,
+    "epsilon_start": 1.0,
     "epsilon_min": 0.05,
+    "epsilon_decay": 0.9,
     "alpha" : 0.1,
     "no._of_bins": 5,
     
@@ -44,7 +45,7 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 30.0
 
-sellers_spec = [('GVWY',19), ('RL', 1, {'epsilon': CONFIG['epsilon'], 'action_space': CONFIG['action_space'], 'q_table_seller': 'q_table_seller.csv'})]
+sellers_spec = [('GVWY',19), ('RL', 1, {'epsilon': CONFIG['epsilon_start'], 'action_space': CONFIG['action_space'], 'q_table_seller': 'q_table_seller.csv'})]
 buyers_spec = [('GVWY',20)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}

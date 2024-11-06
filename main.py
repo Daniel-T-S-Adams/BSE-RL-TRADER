@@ -1,5 +1,6 @@
 # The file that is used to run the code.
 
+import logging
 
 # Importing Global Parameters
 from GlobalParameters import CONFIG
@@ -19,31 +20,49 @@ from Test_Policies import Test_all_policies
 # Import the main function for plotting
 from Plotting import create_plots
 
+# Configure logging in the main script
+logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
 
-# Sets up the subfolders
-create_subfolders()
 
-# Training the RL agent with testing
-train( total_eps=CONFIG['total_eps'], 
+def main():
+    """
+    Main function to set up subfolders, train the RL agent, test policies, 
+    plot results, and clean up the directory.
+
+    Steps:
+    1. Creates necessary subfolders.
+    2. Trains the reinforcement learning agent with specified parameters.
+    3. Tests all policies after training.
+    4. Creates plots based on saved statistics.
+    5. Cleans up files in the directory for the next run.
+    """
+
+    # Sets up the subfolders
+    create_subfolders()
+
+    # Training the RL agent with testing
+    train(
+        total_eps=CONFIG['total_eps'], 
         market_params=CONFIG['market_params'], 
-        test_freq=CONFIG['test_freq'],
-        epsilon_start=CONFIG['epsilon'])
+        epsilon_start=CONFIG['epsilon_start']
+    )
 
+    print("Finished the Training")
 
-print(f"Finished the Training")
+    # Testing all policies
+    saved_stats = Test_all_policies(
+        CONFIG['GPI_test_freq'], 
+        CONFIG['num_GPI_iter'], 
+        CONFIG['market_params']
+    )
 
+    print("Finished the Testing")
 
-saved_stats = Test_all_policies(CONFIG['GPI_test_freq'], CONFIG['num_GPI_iter'], CONFIG['market_params'],CONFIG['epsilon'])
+    # Do all the plotting
+    create_plots(saved_stats)
 
+    # Clean up the directory by deleting files for the next run
+    delete_files()
 
-print(f"Finished the Testing")
-
-
-# Do all the plotting
-create_plots(saved_stats)
-
-
-# Clean up the directory by deleting files for the next run
-delete_files()
-
-
+if __name__ == "__main__":
+    main()
