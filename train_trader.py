@@ -48,20 +48,11 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
     sa_returns = defaultdict(lambda: 0)
     
     # Empty dictionary 
-    Q_old = {}
+    Q_old = defaultdict(lambda: 0.0)
     
     for episode in range(1, total_eps + 1):
-        # Run the market session once, it saves a CSV file
-        market_session(*market_params)
-        
-        # Check if there's a sell trader, and then read the episode information from its CSV file
-        # Note this means every episode we need to write and read a CSV
-        try:
-            file = 'episode_seller.csv'
-            obs_list, action_list, reward_list = load_episode_data(file)
-        except Exception as e:
-            logger.error(f"Error loading seller episode {episode}: {e}")
-            pass
+        # Run the market session once, it returns a list of observations, actions and rewards for the RL trader 
+        obs_list, action_list, reward_list = market_session(*market_params)
         
         # Update the count and returns
         try:
@@ -72,12 +63,18 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
 
         # If we have done the designated number of episodes for this policy evaluation, compute the q_values i.e. q_table
         if episode % CONFIG["eps_per_evaluation"] == 0: 
-            # Compute the Q_new by averaging 
-            Q_new = average(sa_counts, sa_returns)
+            # Compute the Q_mc by averaging 
+            Q_mc = average(sa_counts, sa_returns)
             # Compute the next q_table by an incremental update
-            next_q_table = incremental_update(Q_new, Q_old, CONFIG["alpha"])    
+            next_q_table = incremental_update(Q_mc, Q_old, CONFIG["alpha"])    
             # Save this Q_table for the next increment step
             Q_old = next_q_table
+
+            # update the market parameter q_table dictionary with the new q_table
+            market_params[3]['sellers'][1][2]['q_table_seller'] = next_q_table
+
+
+            #### Save CSV files (every so often?) (for later inspection)  ####
             # Save the new q_table dictionary to a CSV file named q_table_seller.csv
             save_dict_to_csv(next_q_table)
             
@@ -88,10 +85,7 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
             # Save sa_counts to a CSV file for this GPI_iter (to keep track)
             sa_counts_filename = os.path.join(CONFIG["counts"], f'sa_counts_after_GPI_{GPI_iter}.csv')
             save_sa_counts_to_csv(sa_counts, sa_counts_filename)
-            
-            # Restart the counts and returns for the next iteration of policy evaluation
-            sa_counts = defaultdict(lambda: 0)
-            sa_returns = defaultdict(lambda: 0)
+            #### End of saving CSV files ####
             
             # Update epsilon for the next iteration of policy evaluation
             epsilon = linear_epsilon_decay(
@@ -99,49 +93,19 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
                 CONFIG["num_GPI_iter"], 
                 epsilon_start, 
                 CONFIG["epsilon_min"], 
-                CONFIG["epsilon_decay"]
-            )
+                CONFIG["epsilon_decay"])
             market_params[3]['sellers'][1][2]['epsilon'] = epsilon
             logger.info(f"New epsilon: {epsilon}")
             
+
+            # Restart the counts and returns for the next iteration of policy evaluation
+            sa_counts = defaultdict(lambda: 0)
+            sa_returns = defaultdict(lambda: 0)
+
             GPI_iter += 1
             logger.info(f"Starting GPI iteration {GPI_iter}")
     
     return  
-
-# This takes a file name for a CSV file, containing the episode data: state, action, reward. It reads this file and converts it to lists
-def load_episode_data(file: str) -> Tuple[List[Tuple], List[float], List[float]]:
-    """
-    Load episode data from a CSV file.
-
-    Parameters:
-        file (str): The filename of the CSV file containing episode data.
-
-    Returns:
-        Tuple[List[Tuple], List[float], List[float]]: Lists of observations, actions, and rewards.
-    """
-    obs_list, action_list, reward_list = [], [], []
-
-    with open(file, 'r') as f:
-        reader = csv.reader(f)
-        next(reader)  # Skip the header
-        for row_number, row in enumerate(reader, start=1):
-            try:
-                # Safely evaluate the Observation string to a tuple
-                obs = ast.literal_eval(row[0])
-                if not isinstance(obs, tuple):
-                    raise ValueError(f"Observation at row {row_number} is not a tuple.")
-
-                obs_list.append(obs)
-
-                # Convert Action and Reward to float
-                action_list.append(float(row[1]))
-                reward_list.append(float(row[2]))
-            except Exception as e:
-                logger.error(f"Error processing row {row_number}: {e}")
-                continue  # Skip problematic rows
-
-    return obs_list, action_list, reward_list
 
 # Function to save sa_counts to a CSV file
 def save_sa_counts_to_csv(sa_counts, filename):
@@ -199,7 +163,7 @@ def learn(
         
     return sa_counts, sa_returns
 
-# Takes in the counts and returns, spits out the estimate for Q_new as a dictionary  
+# Takes in the counts and returns, spits out the estimate for Q_mc as a dictionary  
 def average(sa_counts, sa_returns, save=False) -> Dict:
     """
     Calculate the average return for each state-action pair.
@@ -219,6 +183,7 @@ def average(sa_counts, sa_returns, save=False) -> Dict:
         if sa_counts[key] == 0:
             raise ValueError(f"Count for key {key} is zero, cannot divide by zero.")
 
+    
     # Create a new dictionary with the results of the division
     sa_average = {key: sa_returns[key] / sa_counts[key] for key in sa_returns}
     
@@ -230,12 +195,12 @@ def average(sa_counts, sa_returns, save=False) -> Dict:
         
     return sa_average
 
-def incremental_update(Q_new: Dict, Q_old: Dict, alpha) -> Dict:
+def incremental_update(Q_mc: Dict, Q_old: Dict, alpha) -> Dict:
     """
     Perform an incremental update of the Q-values.
 
     Parameters:
-        Q_new (Dict): The new Q-values.
+        Q_mc (Dict): The new Q-values.
         Q_old (Dict): The previous Q-values.
         alpha (float): Learning rate.
 
@@ -243,18 +208,18 @@ def incremental_update(Q_new: Dict, Q_old: Dict, alpha) -> Dict:
         Dict: Updated Q-values.
     """
     # Initialize the merged dictionary
-    next_q_table = {}
+    next_q_table = defaultdict(lambda: 0.0)
     
     # Get all unique keys from both dictionaries
-    all_keys = set(Q_new.keys()).union(set(Q_old.keys()))
+    all_keys = set(Q_mc.keys()).union(set(Q_old.keys()))
     
     for key in all_keys:
-        if key in Q_new and key in Q_old:
+        if key in Q_mc and key in Q_old:
             # If the key exists in both, apply the update rule
-            next_q_table[key] = Q_old[key] + alpha * (Q_new[key] - Q_old[key])
-        elif key in Q_new:
-            # If the key is only in Q_new, take its value from Q_new
-            next_q_table[key] = Q_new[key]
+            next_q_table[key] = Q_old[key] + alpha * (Q_mc[key] - Q_old[key])
+        elif key in Q_mc:
+            # If the key is only in Q_mc, take its value from Q_mc
+            next_q_table[key] = Q_mc[key]
         else:
             # If the key is only in Q_old, take its value from Q_old
             next_q_table[key] = Q_old[key]

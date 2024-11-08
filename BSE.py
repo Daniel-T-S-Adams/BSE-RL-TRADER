@@ -486,7 +486,7 @@ class Exchange(Orderbook):
         return public_data
 
 
-# #################--Traders below here--#############
+###############--Traders below here--#############
 
 
 # Trader superclass
@@ -1896,7 +1896,7 @@ class RLAgent(Trader):
             if 'q_table_buyer' in params and self.type == 'Buyer':
                 self.q_table = self.load_q_table(params['q_table_buyer'])
             elif 'q_table_seller' in params and self.type == 'Seller':
-                self.q_table = self.load_q_table(params['q_table_seller'])
+                self.q_table = params['q_table_seller']
             if 'epsilon' in params:
                 self.epsilon = params['epsilon']
 
@@ -1905,15 +1905,12 @@ class RLAgent(Trader):
         self.old_balance = 0
         self.num_actions = len(self.action_space)
 
-        # Initialize file to write obs, action, rewards
-        if self.type == 'Buyer':
-            file = 'episode_buyer.csv'
-        elif self.type == 'Seller':
-            file = 'episode_seller.csv'
+        # Initialize empty lists to track the state action and reward of the trader. 
+        self.states = []
+        self.actions = []
+        self.rewards = []
 
-        with open(file, 'w', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(['Observation', 'Action', 'Reward'])
+
 
     @classmethod
     def load_q_table(self, file_path: str) -> DefaultDict[tuple, float]:
@@ -1945,6 +1942,14 @@ class RLAgent(Trader):
         return q_table
 
     def getorder(self, time, countdown, lob):     
+        """
+        function to generate the order and track the latest state, action, reward.
+
+        Steps:
+        
+        """
+
+
         if self.type == 'Buyer':
                 file = 'episode_buyer.csv'
         elif self.type == 'Seller':
@@ -1973,7 +1978,6 @@ class RLAgent(Trader):
                     
             # Exploit - choose the action with the highest value
             else:
-               
                 if self.type == 'Buyer':
                     profit = max(list(range(self.num_actions)), key = lambda x: self.q_table[(obs, x)])
                     quote = self.orders[0].price * (1 - profit)
@@ -1990,8 +1994,6 @@ class RLAgent(Trader):
                     quote = self.orders[0].price + action 
                     
 
-            
-
             # Check if it's a bad bid
             if self.type == 'Buyer' and quote > self.orders[0].price:
                 quote = self.orders[0].price
@@ -1999,45 +2001,42 @@ class RLAgent(Trader):
             # Check if it's a bad ask
             elif self.type == 'Seller' and quote < self.orders[0].price:
                 quote = self.orders[0].price
+        
+            # Generate the order
+            order = Order(self.tid, order_type, (quote), self.orders[0].qty, time, lob['QID'])
+            self.lastquote = order
 
+
+            # Track the latest state, action and reward
+            reward = 0.0 
+            self.states.append(obs)
+            self.actions.append(action)
+            self.rewards.append(reward)
 
             # Write the current state, action and reward
             reward = 0.0
             with open(file, 'a', newline='') as f:
                 writer = csv.writer(f)
                 writer.writerow([obs, action, reward])
-        
-            order = Order(self.tid, order_type, (quote), self.orders[0].qty, time, lob['QID'])
-            self.lastquote = order
+
+
         return order
     
 
     def respond(self, time, lob, trade, verbose):
+        '''
+        Function that, if the RL agent was involved in the last trade updates the reward of the last action with the profit that was made. 
+        '''
         self.profitpertime = self.profitpertime_update(time, self.birthtime, self.balance)
 
-        if self.type == 'Buyer':
-            file = 'episode_buyer.csv'
-        elif self.type == 'Seller':
-            file = 'episode_seller.csv'
 
         if trade is not None:
             # Check if the RL trader was involved in the trade
             if trade['party1'] == self.tid or trade['party2'] == self.tid:
                 reward = self.balance - self.old_balance
-                # Read the contents of episode.csv
-                with open(file, 'r') as f:
-                    lines = f.readlines()
+                self.rewards[-1] = reward
 
-                # Modify the last entry with the new reward
-                if len(lines) > 1:  # Ensure there's at least one entry besides the header
-                    last_entry = lines[-1].strip().split(',')
-                    last_entry[-1] = str(reward)
-                    lines[-1] = ','.join(last_entry) + '\n'
-
-                # Write the updated contents back to episode.csv
-                with open(file, 'w', newline='') as f:
-                    f.writelines(lines)
-
+            
                 self.old_balance = self.balance
         
         return None
@@ -2100,8 +2099,6 @@ def populate_market(traders_spec, traders, shuffle, verbose):
     # traders_spec is a list of buyer-specs and a list of seller-specs
     # each spec is (<trader type>, <number of this type of trader>, optionally: <params for this type of trader>)
     
-    # # Load the Q-table from the CSV file
-    # q_table = RLAgent.load_q_table(q_table_file)
 
     def trader_type(robottype, name, parameters):
         balance = 0.00
@@ -2651,150 +2648,15 @@ def market_session(sess_id, starttime, endtime, trader_spec, order_schedule, dum
         lobframes.close()
 
 
-#############################
+    
+    # Identify the RLAgent in the traders dictionary and return its data : state, action, reward lists
+    for trader_id, trader in traders.items():
+        if isinstance(trader, RLAgent):  # Check if the trader is an RLAgent instance
+            rl_states = trader.states
+            rl_actions = trader.actions
+            rl_rewards = trader.rewards
+            break  # Stop searching once the RLAgent is found
 
-# Below here is where we set up and run a whole series of experiments
-
-
-if __name__ == "__main__":
-
-    # set up common parameters for all market sessions
-    # 1000 days is good, but 3*365=1095, so may as well go for three years.
-    n_days = 10
-    start_time = 0.0
-    # end_time = 60.0 * 60.0 * 24 * n_days
-    end_time = 500.0
-    duration = end_time - start_time
-
-    # schedule_offsetfn returns time-dependent offset, to be added to schedule prices
-    def schedule_offsetfn(t):
-        pi2 = math.pi * 2
-        c = math.pi * 3000
-        wavelength = t / c
-        gradient = 100 * t / (c / pi2)
-        amplitude = 100 * t / (c / pi2)
-        offset = gradient + amplitude * math.sin(wavelength * t)
-        return int(round(offset, 0))
-
-    # Here is an example of how to use the offset function
-    #
-    # range1 = (10, 190, schedule_offsetfn)
-    # range2 = (200, 300, schedule_offsetfn)
-
-    # Here is an example of how to switch from range1 to range2 and then back to range1,
-    # introducing two "market shocks"
-    # -- here the timings of the shocks are at 1/3 and 2/3 into the duration of the session.
-    #
-    # supply_schedule = [ {'from':start_time, 'to':duration/3, 'ranges':[range1], 'stepmode':'fixed'},
-    #                     {'from':duration/3, 'to':2*duration/3, 'ranges':[range2], 'stepmode':'fixed'},
-    #                     {'from':2*duration/3, 'to':end_time, 'ranges':[range1], 'stepmode':'fixed'}
-    #                   ]
-
-    range1 = (50, 150)
-    # range1 = (4, 6)
-    supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
-
-    range2 = (50, 150)
-    # range2 = (4, 6)
-    demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
-
-    # new customer orders arrive at each trader approx once every order_interval seconds
-    order_interval = 30
-
-    order_sched = {'sup': supply_schedule, 'dem': demand_schedule,
-                   'interval': order_interval, 'timemode': 'drip-poisson'}
-
-    # Use 'periodic' if you want the traders' assignments to all arrive simultaneously & periodically
-    #               'order_interval': 30, 'timemode': 'periodic'}
-
-    # buyers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10)]
-    # sellers_spec = [('GVWY',10),('SHVR',10),('ZIC',10),('ZIP',10)]
-
-    opponent = 'GVWY'
-    opp_N = 30
-#    sellers_spec = [('PRSH', 30),(opponent, opp_N-1)]
-#    buyers_spec = [(opponent, opp_N)]
-
-
-    # run a sequence of trials, one session per trial
-
-    verbose = False
-
-    # n_trials is how many trials (i.e. market sessions) to run in total
-    n_trials = 1
-
-    # n_recorded is how many trials (i.e. market sessions) to write full data-files for
-    n_trials_recorded = 1
-
-    trial = 1
-
-    while trial < (n_trials+1):
-
-        # create unique i.d. string for this trial
-        trial_id = 'bse_d%03d_i%02d_%04d' % (n_days, order_interval, trial)
-
-        buyers_spec = [('ZIPSH', 10, {'k': 4})]
-        sellers_spec = [('ZIPSH', 10, {'k': 4})]
-
-        # buyers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5)]
-        # sellers_spec = [('SHVR', 5), ('GVWY', 5), ('ZIC', 5), ('ZIP', 5), ('RL', 1, {'q_table_seller': 'q_table_seller.csv', 'epsilon': 0.9})]
-        sellers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
-        buyers_spec = [('SHVR', 1), ('GVWY', 1), ('ZIC', 1), ('ZIP', 1)]
-
-        traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
-
-        if trial < n_trials_recorded:
-            dump_flags = {'dump_blotters': False, 'dump_lobs': False, 'dump_strats': False,
-                          'dump_avgbals': False, 'dump_tape': False}
-        else:
-            dump_flags = {'dump_blotters': True, 'dump_lobs': True, 'dump_strats': True,
-                          'dump_avgbals': True, 'dump_tape': True}
-
-        market_session(trial_id, start_time, end_time, traders_spec, order_sched, dump_flags, verbose)
-        
-        trial = trial + 1
-
-    # run a sequence of trials that exhaustively varies the ratio of four trader types
-    # NB this has weakness of symmetric proportions on buyers/sellers -- combinatorics of varying that are quite nasty
-    #
-    # n_trader_types = 4
-    # equal_ratio_n = 4
-    # n_trials_per_ratio = 50
-    #
-    # n_traders = n_trader_types * equal_ratio_n
-    #
-    # fname = 'balances_%03d.csv' % equal_ratio_n
-    #
-    # tdump = open(fname, 'w')
-    #
-    # min_n = 1
-    #
-    # trialnumber = 1
-    # trdr_1_n = min_n
-    # while trdr_1_n <= n_traders:
-    #     trdr_2_n = min_n
-    #     while trdr_2_n <= n_traders - trdr_1_n:
-    #         trdr_3_n = min_n
-    #         while trdr_3_n <= n_traders - (trdr_1_n + trdr_2_n):
-    #             trdr_4_n = n_traders - (trdr_1_n + trdr_2_n + trdr_3_n)
-    #             if trdr_4_n >= min_n:
-    #                 buyers_spec = [('GVWY', trdr_1_n), ('SHVR', trdr_2_n),
-    #                                ('ZIC', trdr_3_n), ('ZIP', trdr_4_n)]
-    #                 sellers_spec = buyers_spec
-    #                 traders_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
-    #                 # print buyers_spec
-    #                 trial = 1
-    #                 while trial <= n_trials_per_ratio:
-    #                     trial_id = 'trial%07d' % trialnumber
-    #                     market_session(trial_id, start_time, end_time, traders_spec,
-    #                                    order_sched, tdump, False, True)
-    #                     tdump.flush()
-    #                     trial = trial + 1
-    #                     trialnumber = trialnumber + 1
-    #             trdr_3_n += 1
-    #         trdr_2_n += 1
-    #     trdr_1_n += 1
-    # tdump.close()
-    #
-    # print(trialnumber)
+    # Return the RLAgent's state, action, and reward lists
+    return rl_states, rl_actions, rl_rewards
 

@@ -2,7 +2,9 @@
 # A Configuration file for the Global Variables.
 #
 
+# Imports from Standard Library 
 import os
+from collections import defaultdict
 
 CONFIG = {
     # setup ID for this configuration
@@ -10,15 +12,16 @@ CONFIG = {
     
     # Parameters for the Agent 
     "eps_per_evaluation": 1,
-    "num_GPI_iter": 500,
+    "num_GPI_iter": 300,
     "GPI_test_freq": 100,
-    "test_episodes": 900,
+    "test_episodes": 700,
     "gamma": 0.3,
     "epsilon_start": 1.0,
     "epsilon_min": 0.05,
     "epsilon_decay": 0.9,
     "alpha" : 0.1,
     "no._of_bins": 5,
+    "initial q_table": defaultdict(lambda: 0.0),
     
     # Parameters for the BSE
     "bse_sys_minprice" : 1,
@@ -45,15 +48,15 @@ sess_id = 'session_1'
 start_time = 0.0
 end_time = 30.0
 
-sellers_spec = [('GVWY',19), ('RL', 1, {'epsilon': CONFIG['epsilon_start'], 'action_space': CONFIG['action_space'], 'q_table_seller': 'q_table_seller.csv'})]
+sellers_spec = [('GVWY',19), ('RL', 1, {'epsilon': CONFIG['epsilon_start'], 'action_space': CONFIG['action_space'], 'q_table_seller': CONFIG['initial q_table']})]
 buyers_spec = [('GVWY',20)]
 
 trader_spec = {'sellers': sellers_spec, 'buyers': buyers_spec}
 
-range1 = (1, 3)
+range1 = (1, 5)
 supply_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range1], 'stepmode': 'fixed'}]
 
-range2 = (1, 3)
+range2 = (1, 5)
 demand_schedule = [{'from': start_time, 'to': end_time, 'ranges': [range2], 'stepmode': 'fixed'}]
 
 # new customer orders arrive at each trader approx once every order_interval seconds
