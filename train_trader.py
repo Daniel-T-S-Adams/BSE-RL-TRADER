@@ -1,12 +1,16 @@
 import random
 import csv
 import numpy as np 
+
+
 from tqdm import tqdm
 from BSE import market_session
 from collections import defaultdict
 from typing import List, Dict, DefaultDict, Tuple
-from q_table_data import load_q_table, dump_q_table, update_q_table
 from epsilon_scheduling import linear_epsilon_decay
+from converting_csv_and_dictionary import save_q_table_dict_to_csv, save_sa_counts_to_csv
+
+
 import ast
 
 # File handling
@@ -78,7 +82,7 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
                 #### Save CSV files (every so often?) (for later inspection)  ####
                 # Save the new q_table dictionary to a CSV file named q_table_seller.csv
                 q_table_file_name = os.path.join(CONFIG["q_tables"], f'q_table_seller_after_GPI_{GPI_iter}.csv')
-                save_dict_to_csv(next_q_table, q_table_file_name) 
+                save_q_table_dict_to_csv(next_q_table, q_table_file_name) 
                 
                 # Save sa_counts to a CSV file for this GPI_iter (to keep track)
                 sa_counts_filename = os.path.join(CONFIG["counts"], f'sa_counts_after_GPI_{GPI_iter}.csv')
@@ -105,22 +109,6 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
     
     return  
 
-# Function to save sa_counts to a CSV file
-def save_sa_counts_to_csv(sa_counts, filename):
-    """
-    Save state-action counts to a CSV file.
-
-    Parameters:
-        sa_counts (dict): Dictionary containing state-action counts.
-        filename (str): The filename to save the counts.
-    """
-    with open(filename, 'w', newline='') as csv_file:
-        writer = csv.writer(csv_file)
-        # Write the header
-        writer.writerow(['State', 'Action', 'Count'])
-        # Write the data
-        for (state, action), count in sa_counts.items():
-            writer.writerow([state, action, count])
 
 def learn(
     obs: List[int], 
@@ -224,19 +212,3 @@ def incremental_update(Q_mc: Dict, Q_old: Dict, alpha) -> Dict:
     
     return next_q_table
 
-def save_dict_to_csv(new_q_table: Dict, filename : str):
-    """
-    Save the Q-table to a CSV file.
-
-    Parameters:
-        new_q_table (Dict): The Q-table to save.
-    """
-    sorted_new_q_table = sorted(new_q_table.items(), key=lambda x: x[0][0])
-    
-    with open(filename, 'w', newline='') as file:
-        writer = csv.writer(file)
-        # Write the header
-        writer.writerow(['State', 'Action', 'Q-Value'])
-        # Write the data
-        for (state, action), q_value in sorted_new_q_table:
-            writer.writerow([state, action, q_value])

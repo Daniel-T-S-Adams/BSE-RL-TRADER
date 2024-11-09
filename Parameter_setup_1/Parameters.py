@@ -8,13 +8,13 @@ from collections import defaultdict
 
 CONFIG = {
     # setup ID for this configuration
-    'setup': 'lownumevals',
+    'setup': 'Parameter_setup_1',
     
     # Parameters for the Agent 
     "eps_per_evaluation": 1,
-    "num_GPI_iter": 300,
-    "GPI_CSV_save_freq": 100,
-    "test_episodes": 300,
+    "num_GPI_iter": 5000,
+    "GPI_CSV_save_freq": 1000,
+    "test_episodes": 1000,
     "gamma": 0.3,
     "epsilon_start": 1.0,
     "epsilon_min": 0.05,

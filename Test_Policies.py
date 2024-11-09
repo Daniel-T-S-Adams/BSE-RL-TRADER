@@ -12,7 +12,7 @@ from BSE import market_session
 from GlobalParameters import CONFIG
 from Plotting import create_plots
 from epsilon_scheduling import linear_epsilon_decay
-from q_table_data import load_q_table
+from converting_csv_and_dictionary import load_q_table
 
 def test_policy(episodes: int, market_params: tuple) -> dict:
     """

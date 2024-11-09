@@ -1943,19 +1943,12 @@ class RLAgent(Trader):
 
     def getorder(self, time, countdown, lob):     
         """
-        function to generate the order and track the latest state, action, reward.
+        function to generate the order, and also tracks the latest state, action, reward.
 
         Steps:
         
         """
-
-
-        if self.type == 'Buyer':
-                file = 'episode_buyer.csv'
-        elif self.type == 'Seller':
-                file = 'episode_seller.csv'
-        
-        
+                
         if len(self.orders) < 1:
             order = None
             
@@ -2012,13 +2005,6 @@ class RLAgent(Trader):
             self.states.append(obs)
             self.actions.append(action)
             self.rewards.append(reward)
-
-            # Write the current state, action and reward
-            reward = 0.0
-            with open(file, 'a', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow([obs, action, reward])
-
 
         return order
     
