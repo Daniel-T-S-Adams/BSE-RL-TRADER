@@ -1,15 +1,18 @@
 # A file for testing the performance of the trader.
 # The main function takes a q_table and a number of episodes to test that policy for.
 
+# Imports from Standard Library
 import logging
 logger = logging.getLogger(__name__)
 
+
+
+# Imports from Third Party Modules
 from BSE import market_session
 from GlobalParameters import CONFIG
-
-# Import the main function for plotting
 from Plotting import create_plots
 from epsilon_scheduling import linear_epsilon_decay
+from q_table_data import load_q_table
 
 def test_policy(episodes: int, market_params: tuple) -> dict:
     """
@@ -120,12 +123,14 @@ def Test_all_policies(GPI_test_freq: int, num_GPI_iters: int, market_params: tup
 
     saved_stats = []
     for GPI_iter in iters_to_test:
-        logger.info(f"Testing the performance after GPI iteration {GPI_iter}")
-
         q_table_string = CONFIG['setup'] + f'\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv'
-        market_params[3]['sellers'][1][2]['q_table_seller'] = q_table_string
-        market_params[3]['sellers'][1][2]['epsilon'] = 0.0
+        logger.info(f"Testing the performance after GPI iteration {GPI_iter}")
         logger.info(f"Using q_table: {q_table_string}")
+
+        q_table = load_q_table(q_table_string)
+        market_params[3]['sellers'][1][2]['q_table_seller'] = q_table
+        market_params[3]['sellers'][1][2]['epsilon'] = 0.0
+        
 
         cumulative_stats = test_policy(episodes=CONFIG['test_episodes'], market_params=market_params)
 

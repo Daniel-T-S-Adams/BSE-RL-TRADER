@@ -73,19 +73,17 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
             # update the market parameter q_table dictionary with the new q_table
             market_params[3]['sellers'][1][2]['q_table_seller'] = next_q_table
 
-
-            #### Save CSV files (every so often?) (for later inspection)  ####
-            # Save the new q_table dictionary to a CSV file named q_table_seller.csv
-            save_dict_to_csv(next_q_table)
-            
-            # Save the seller's q_table file for this GPI_iter (to keep track)
-            new_file_name = os.path.join(CONFIG["q_tables"], f'q_table_seller_after_GPI_{GPI_iter}.csv')
-            shutil.copy('q_table_seller.csv', new_file_name)  
-            
-            # Save sa_counts to a CSV file for this GPI_iter (to keep track)
-            sa_counts_filename = os.path.join(CONFIG["counts"], f'sa_counts_after_GPI_{GPI_iter}.csv')
-            save_sa_counts_to_csv(sa_counts, sa_counts_filename)
-            #### End of saving CSV files ####
+            if episode % CONFIG["GPI_CSV_save_freq"] == 0:
+                logger.info(f"Saving CSV files for GPI iter {GPI_iter}")
+                #### Save CSV files (every so often?) (for later inspection)  ####
+                # Save the new q_table dictionary to a CSV file named q_table_seller.csv
+                q_table_file_name = os.path.join(CONFIG["q_tables"], f'q_table_seller_after_GPI_{GPI_iter}.csv')
+                save_dict_to_csv(next_q_table, q_table_file_name) 
+                
+                # Save sa_counts to a CSV file for this GPI_iter (to keep track)
+                sa_counts_filename = os.path.join(CONFIG["counts"], f'sa_counts_after_GPI_{GPI_iter}.csv')
+                save_sa_counts_to_csv(sa_counts, sa_counts_filename)
+                #### End of saving CSV files ####
             
             # Update epsilon for the next iteration of policy evaluation
             epsilon = linear_epsilon_decay(
@@ -226,7 +224,7 @@ def incremental_update(Q_mc: Dict, Q_old: Dict, alpha) -> Dict:
     
     return next_q_table
 
-def save_dict_to_csv(new_q_table: Dict):
+def save_dict_to_csv(new_q_table: Dict, filename : str):
     """
     Save the Q-table to a CSV file.
 
@@ -235,7 +233,7 @@ def save_dict_to_csv(new_q_table: Dict):
     """
     sorted_new_q_table = sorted(new_q_table.items(), key=lambda x: x[0][0])
     
-    with open('q_table_seller.csv', 'w', newline='') as file:
+    with open(filename, 'w', newline='') as file:
         writer = csv.writer(file)
         # Write the header
         writer.writerow(['State', 'Action', 'Q-Value'])
