@@ -2107,8 +2107,8 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             return Trader_PRZI('PRSH', name, balance, parameters, time0)
         elif robottype == 'PRDE':
             return Trader_PRZI('PRDE', name, balance, parameters, time0)
-        elif robottype == 'RL':
-            return RLAgent('RL', name, balance, parameters, time0)
+        elif robottype == 'RL_tabular':
+            return RLAgent('RL_tabular', name, balance, parameters, time0)
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 
@@ -2154,7 +2154,7 @@ def populate_market(traders_spec, traders, shuffle, verbose):
                     parameters = {'optimizer': None, 'k': 1,
                                   'strat_min': trader_params['s_min'], 'strat_max': trader_params['s_max']}
 
-        if ttype == 'RL':
+        if ttype == 'RL_tabular':
             # WE SHOULD MAKE IT SO THAT WE CAN JUST LOAD IN THE ENTIRE dictionary.
             # load parameters for RL agent
             parameters = trader_params

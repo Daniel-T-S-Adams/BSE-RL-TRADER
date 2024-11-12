@@ -12,7 +12,7 @@ from setup_folders import delete_files
 
 
 # Import the main function for training
-from train_trader import train
+from train_RL_trader import train
 
 # Import the main function for testing
 from Test_Policies import Test_all_policies
