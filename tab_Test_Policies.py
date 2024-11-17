@@ -6,13 +6,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-
 # Imports from Third Party Modules
 from BSE import market_session
-from GlobalParameters import CONFIG
-from Plotting import create_plots
-from epsilon_scheduling import linear_epsilon_decay
-from converting_csv_and_dictionary import load_q_table
+from config.config_params import CONFIG
+from tab_converting_csv_and_dictionary import load_q_table
 
 def test_policy(episodes: int, market_params: tuple) -> dict:
     """
@@ -29,9 +26,7 @@ def test_policy(episodes: int, market_params: tuple) -> dict:
 
     # Initialize an empty dictionary to store cumulative average profit
     cumulative_stats = {}
-    # For storing previous profit (unused currently)
-    previous_avg_profit = None
-
+    
     for episode in range(episodes):
         # Run the market session
         market_session(*updated_market_params)
@@ -119,17 +114,17 @@ def Test_all_policies(GPI_test_freq: int, num_GPI_iters: int, market_params: tup
         list: A list of dictionaries containing cumulative stats for each tested GPI iteration.
     """
     # Test the performance for the specified GPI iterations
-    iters_to_test = list(range(1, num_GPI_iters + 1, GPI_test_freq))
+    iters_to_test = list(range(0, num_GPI_iters + 1, GPI_test_freq))
 
     saved_stats = []
     for GPI_iter in iters_to_test:
-        q_table_string = CONFIG['setup'] + f'\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv'
+        q_table_string = 'tab_' + CONFIG['setup'] + f'\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv'
         logger.info(f"Testing the performance after GPI iteration {GPI_iter}")
         logger.info(f"Using q_table: {q_table_string}")
 
         q_table = load_q_table(q_table_string)
-        market_params[3]['sellers'][1][2]['q_table_seller'] = q_table
-        market_params[3]['sellers'][1][2]['epsilon'] = 0.0
+        market_params[3]['sellers'][CONFIG['rl_index']][2]['q_table_seller'] = q_table
+        market_params[3]['sellers'][CONFIG['rl_index']][2]['epsilon'] = 0.0
         
 
         cumulative_stats = test_policy(episodes=CONFIG['test_episodes'], market_params=market_params)

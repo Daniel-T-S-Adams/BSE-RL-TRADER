@@ -65,7 +65,7 @@ from tqdm import tqdm
 import numpy as np
 
 # Importing Global Parameters
-from GlobalParameters import CONFIG
+from config.config_params import CONFIG
 
 # a bunch of system constants (globals)
 bse_sys_minprice = CONFIG["bse_sys_minprice"]        # minimum price in the system, in cents/pennies
@@ -73,15 +73,89 @@ bse_sys_maxprice = CONFIG["bse_sys_maxprice"]        # maximum price in the syst
 # ticksize should be a param of an exchange (so different exchanges have different ticksizes)
 ticksize = 1  # minimum change in price, in cents/pennies
 
-def calc_average_price(list):
-        # Calculate the total price contribution and total quantity
-        total_price = sum(price * quantity for price, quantity in list)
-        total_quantity = sum(quantity for price, quantity in list)
+
+def calc_average_price_np(data):
+    """
+    Calculate the weighted average price of a list of (price, quantity) pairs.
+
+    Parameters:
+        data (list of tuple): A list where each element is a tuple of (price, quantity).
+            - price (float or int): The price value.
+            - quantity (float or int): The corresponding quantity for the price.
+
+    Returns:
+        float: The weighted average price of the list.
+        -1: If the total quantity is zero (e.g., empty order book).
+    """
+    if not data:
+        return -1  # Handle empty input like `calc_average_price`
+    
+    prices, quantities = zip(*data)  # Separate prices and quantities
+   
+    return np.average(prices, weights=quantities)
+
+
+def calc_weighted_std_np(data):
+    """
+    Calculate the weighted standard deviation of a list of (price, quantity) pairs.
+
+    Parameters:
+        data (list of tuple): A list where each element is a tuple of (price, quantity).
+
+    Returns:
+        float: The weighted standard deviation, or -1 if the input list is empty.
+    """
+    if not data:
+        return -1  # Handle empty input
+
+    # Separate prices and quantities
+    prices, quantities = zip(*data)
+
+    # Calculate the weighted mean
+    weighted_mean = np.average(prices, weights=quantities)
+
+    # Calculate the weighted variance
+    weighted_variance = np.average((np.array(prices) - weighted_mean)**2, weights=quantities)
+
+    # Take the square root of the weighted variance to get the standard deviation
+    weighted_std = np.sqrt(weighted_variance)
+
+    return weighted_std
+
+def get_observation(type, lob, countdown, order):
+    observation = []  # List to store active observation values
+
+    if CONFIG['best']:
+        observation.extend([float(lob['bids']['best']), float(lob['asks']['best'])])
+            
+    if CONFIG['worst']:
+        observation.extend([float(lob['bids']['worst']), float(lob['asks']['worst'])])
+    
+    if CONFIG['average']:
+        observation.extend([float(lob['bids']['lob']), float(lob['asks']['lob'])])
         
-        # Calculate the weighted average price
-        weighted_average_price = total_price / total_quantity if total_quantity else 0
+    if CONFIG['std']:
+        std_bid = calc_weighted_std_np(lob['bids']['lob'])
+        std_ask = calc_weighted_std_np(lob['asks']['lob'])
+        observation.extend([float(std_bid), float(std_ask)])
         
-        return weighted_average_price   
+    if CONFIG['order']:
+        type_code = 1 if type == 'Seller' else 0
+        observation.extend([type_code, float(order)])
+
+    if CONFIG['total_orders']:
+        observation.extend([float(lob.bids.n_orders), float(lob.asks.n_orders)])
+        
+    if CONFIG['time_left']:
+        if not (0 <= countdown <= 1):
+            raise ValueError("countdown should be between 0 and 1 inclusive.")
+        observation.append(float(countdown))
+        
+    if CONFIG['binary_flag']:
+        observation.extend([0 if lob.bids.n_orders == 0 else 1, 0 if lob.asks.n_orders == 0 else 1])
+    
+    return tuple(observation)  # Convert list to tuple
+
 
 
 def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, bins=5):
@@ -115,13 +189,25 @@ def bin_average(value, min_price=bse_sys_minprice, max_price=bse_sys_maxprice, b
     return int(bin_average)
 
 
-def get_discrete_state(type, lob, countdown, order):
-    best_bid = bin_average(lob['bids']['best'])
-    best_ask = bin_average(lob['asks']['best'])
-    worst_bid = bin_average(lob['bids']['worst'])
-    worst_ask = bin_average(lob['asks']['worst'])
-    avg_bid = bin_average(calc_average_price(lob['bids']['lob']))
-    avg_ask = bin_average(calc_average_price(lob['asks']['lob']))
+def get_discrete_observation(type, lob, countdown, order):
+    # this function needs generalising for more observations we will need more bin functions for different bounds.
+    
+    if CONFIG['best']:
+        best_bid = bin_average(lob['bids']['best'])
+        best_ask = bin_average(lob['asks']['best'])
+            
+    if CONFIG['worst'] :
+        worst_bid = bin_average(lob['bids']['worst'])
+        worst_ask = bin_average(lob['asks']['worst'])
+    
+    if CONFIG['average'] :
+        avg_bid = bin_average(calc_average_price_np(lob['bids']['lob']))    
+        avg_ask = bin_average(calc_average_price_np(lob['asks']['lob']))
+        
+    if CONFIG['std'] :
+        std_bid = bin_average(calc_weighted_std_np(lob['bids']['lob']))
+        std_ask = bin_average(calc_weighted_std_np(lob['asks']['lob']))
+    
     order = bin_average(order)
     # Map type to a numeric code
     type_code = 1 if type == 'Seller' else 0  # Adjust as needed for other types
@@ -1956,7 +2042,7 @@ class RLAgent(Trader):
         else:
             order_type = self.orders[0].otype
             # return the best action following an epsilon-greedy policy
-            obs = get_discrete_state(self.type, lob, countdown, self.orders[0].price)
+            obs = get_discrete_observation(self.type, lob, countdown, self.orders[0].price)
             # Explore - sample a random action
             if random.uniform(0, 1) < self.epsilon:
                 

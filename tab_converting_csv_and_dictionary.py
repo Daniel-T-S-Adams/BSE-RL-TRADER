@@ -1,4 +1,4 @@
-from typing import List, Dict, DefaultDict, Tuple
+from typing import Dict, DefaultDict
 from collections import defaultdict
 import csv
 from matplotlib import pyplot as plt
@@ -23,6 +23,7 @@ def load_q_table(file_path: str) -> DefaultDict:
                 q_table[(state, float(action))] = float(q_value)
 
     except FileNotFoundError:
+        print(f"No File found at : {file_path}, returning empty q_table")
         pass  # If the file does not exist, return an empty q_table
 
     return q_table

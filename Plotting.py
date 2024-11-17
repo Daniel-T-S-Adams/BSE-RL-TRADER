@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 from collections import defaultdict
 import os
 
-from GlobalParameters import CONFIG
+from config.config_params import CONFIG
 
 # A file for plotting
 

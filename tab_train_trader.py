@@ -1,6 +1,6 @@
-import random
-import csv
-import numpy as np 
+# tabular RL training
+# load the tabular config
+from config.config_params import CONFIG
 
 
 from tqdm import tqdm
@@ -8,18 +8,14 @@ from BSE import market_session
 from collections import defaultdict
 from typing import List, Dict, DefaultDict, Tuple
 from epsilon_scheduling import linear_epsilon_decay
-from converting_csv_and_dictionary import save_q_table_dict_to_csv, save_sa_counts_to_csv
+from tab_converting_csv_and_dictionary import save_q_table_dict_to_csv, save_sa_counts_to_csv
 
 
 import ast
 
 # File handling
-import shutil
-import csv
 import os
 
-# Importing Global Parameters
-from GlobalParameters import CONFIG
 
 # Import the logging module and create a module-level logger
 import logging
@@ -54,6 +50,10 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
     # Empty dictionary 
     Q_old = defaultdict(lambda: 0.0)
     
+    ## Finish intializing ##
+    
+    ## Start the training ##
+    
     for episode in range(1, total_eps + 1):
         # Run the market session once, it returns a list of observations, actions and rewards for the RL trader 
         obs_list, action_list, reward_list = market_session(*market_params)
@@ -74,8 +74,12 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
             # Save this Q_table for the next increment step
             Q_old = next_q_table
 
-            # update the market parameter q_table dictionary with the new q_table
-            market_params[3]['sellers'][1][2]['q_table_seller'] = next_q_table
+            # Update the market parameter q_table dictionary with the new q_table
+            try :
+                market_params[3]['sellers'][CONFIG['rl_index']][2]['q_table_seller'] = next_q_table
+            except Exception as e:
+                logger.error(f"Error updating q_table in GPI iter {GPI_iter}: {e}")
+                pass
 
             if episode % CONFIG["GPI_CSV_save_freq"] == 0:
                 logger.info(f"Saving CSV files for GPI iter {GPI_iter}")
@@ -96,7 +100,7 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
                 epsilon_start, 
                 CONFIG["epsilon_min"], 
                 CONFIG["epsilon_decay"])
-            market_params[3]['sellers'][1][2]['epsilon'] = epsilon
+            market_params[3]['sellers'][CONFIG['rl_index']][2]['epsilon'] = epsilon
             logger.info(f"New epsilon: {epsilon}")
             
 
