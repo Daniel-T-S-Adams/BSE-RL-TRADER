@@ -97,11 +97,7 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) :
     epsilon = epsilon_start
     
     # initialise the data as tensors for pytorch.
-    # calculate the number of observation features
-    keys_to_check = ["order", "best", "worst", "average", "std", "total_orders", "time_left", "binary_flag"]
-    n_obs_features = sum(CONFIG[key] for key in keys_to_check if key in CONFIG)
-    n_features = n_obs_features + 1 # this is the length of an observation element (plus one for the action) 
-    inputs = torch.empty((0, n_features), dtype=torch.float32)
+    inputs = torch.empty((0, CONFIG["n_features"]), dtype=torch.float32)
     targets = torch.empty((0, 1), dtype=torch.float32)
     
     # initialise the model
@@ -144,8 +140,8 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) :
             pass
             
             
-            # update the market parameter q_table dictionary with the new q_table
-            market_params[3]['sellers'][1][2]['q_table_seller'] = next_q_table
+            # update the market parameter with the newest neural network
+            market_params[3]['sellers'][CONFIG['rl_index']][2]['neual_net'] = neural_network
 
             if episode % CONFIG["GPI_CSV_save_freq"] == 0:
                 logger.info(f"Saving CSV files for GPI iter {GPI_iter}")

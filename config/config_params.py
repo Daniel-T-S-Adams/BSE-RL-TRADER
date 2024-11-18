@@ -6,6 +6,9 @@
 import os
 from collections import defaultdict
 
+# Imports from Third Party Libraries
+from FA_model import NeuralNet
+
 
 CONFIG = {
     # setup ID for this configuration
@@ -74,6 +77,12 @@ if CONFIG['tabular']:
     
     CONFIG = CONFIG | CONFIG_tab # combine to the main dictionary
     
+    # calculate the dimension of the (state,action) space.
+    keys_to_check = ["order", "best", "worst", "average", "std", "total_orders", "time_left", "binary_flag"]
+    n_obs_features = sum(CONFIG[key] for key in keys_to_check if key in CONFIG)
+    CONFIG["n_features"] = n_obs_features + 1 # this is the length of an observation element (plus one for the action) 
+    
+
     sellers_spec = [('RL_tabular', 1, {'epsilon': CONFIG['epsilon_start'], 'action_space': CONFIG['action_space'], 'q_table_seller': CONFIG['initial q_table']}),('GVWY',19) ]
     # Loop through to find the index of the RL agent
     for i, seller in enumerate(sellers_spec):
