@@ -117,7 +117,7 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) :
             
         except Exception as e:
             logger.error(f"Error using data to calculate returns and transform to tensors in episode {episode}: {e}")
-            pass
+            
         
         # Add to the current data under this policy
         inputs = torch.cat((inputs, more_inputs), 0)
@@ -131,25 +131,31 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) :
                 inputs, targets = normalize_data_min_max(inputs, targets)
             except Exception as e:
                 logger.error(f"Error normalizing data in GPI iter {GPI_iter}: {e}")
-                pass
+                
             # Retrain the network 
             try:
                 train_network(neural_network, inputs, targets, criterion, optimizer)
             except Exception as e:
                 logger.error(f"Error training in GPI iter {GPI_iter}: {e}")
-            pass
+            
             
             
             # update the market parameter with the newest neural network
-            market_params[3]['sellers'][CONFIG['rl_index']][2]['neual_net'] = neural_network
+            market_params[3]['sellers'][CONFIG['rl_index']][2]['neural_net'] = neural_network
 
-            if episode % CONFIG["GPI_CSV_save_freq"] == 0:
-                logger.info(f"Saving CSV files for GPI iter {GPI_iter}")
-                #### Save CSV files (every so often?) (for later inspection)  ####
-                # Save the parameters of the network to a CSV file named network_parameters.csv
-                
-                
-                #### End of saving CSV files ####
+
+
+
+            #### Save Network (for later inspection)  ####
+            if episode % CONFIG["GPI_save_freq"] == 0:
+                logger.info(f"Saving the Neural Network for GPI iter {GPI_iter}")
+                file_path = os.path.join(CONFIG["weights"], f'network_at_GPI_{GPI_iter}.pth')
+                try:
+                    torch.save(neural_network.state_dict(), file_path)
+                    logger.info(f"Neural network parameters saved to {file_path}")
+                except Exception as e:
+                    logger.error(f"Error saving neural network parameters in GPI iter {GPI_iter}, episode {episode}: {e}")
+            #### End of saving ####
             
             # Update epsilon for the next iteration of policy evaluation
             epsilon = linear_epsilon_decay(
@@ -158,14 +164,14 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) :
                 epsilon_start, 
                 CONFIG["epsilon_min"], 
                 CONFIG["epsilon_decay"])
-            market_params[3]['sellers'][1][2]['epsilon'] = epsilon
+            market_params[3]['sellers'][CONFIG['rl_index']][2]['epsilon'] = epsilon
             logger.info(f"New epsilon: {epsilon}")
             
 
-            # Restet the data next iteration of policy evaluation
-            inputs = []
-            targets = []
-
+            # reset the data
+            inputs = torch.empty((0, CONFIG["n_features"]), dtype=torch.float32)
+            targets = torch.empty((0, 1), dtype=torch.float32)
+            
             GPI_iter += 1
             logger.info(f"Starting GPI iteration {GPI_iter}")
     

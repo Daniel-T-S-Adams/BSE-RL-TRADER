@@ -81,7 +81,7 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) -> Default
                 logger.error(f"Error updating q_table in GPI iter {GPI_iter}: {e}")
                 pass
 
-            if episode % CONFIG["GPI_CSV_save_freq"] == 0:
+            if episode % CONFIG["GPI_save_freq"] == 0:
                 logger.info(f"Saving CSV files for GPI iter {GPI_iter}")
                 #### Save CSV files (every so often?) (for later inspection)  ####
                 # Save the new q_table dictionary to a CSV file named q_table_seller.csv

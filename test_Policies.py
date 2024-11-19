@@ -4,12 +4,17 @@
 # Imports from Standard Library
 import logging
 logger = logging.getLogger(__name__)
+import os
 
+# Neural Network 
+import torch
+from FA_model import NeuralNet
 
 # Imports from Third Party Modules
 from BSE import market_session
 from config.config_params import CONFIG
 from tab_converting_csv_and_dictionary import load_q_table
+
 
 def test_policy(episodes: int, market_params: tuple) -> dict:
     """
@@ -118,15 +123,39 @@ def Test_all_policies(GPI_test_freq: int, num_GPI_iters: int, market_params: tup
 
     saved_stats = []
     for GPI_iter in iters_to_test:
-        q_table_string = 'tab_' + CONFIG['setup'] + f'\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv'
-        logger.info(f"Testing the performance after GPI iteration {GPI_iter}")
-        logger.info(f"Using q_table: {q_table_string}")
-
-        q_table = load_q_table(q_table_string)
-        market_params[3]['sellers'][CONFIG['rl_index']][2]['q_table_seller'] = q_table
-        market_params[3]['sellers'][CONFIG['rl_index']][2]['epsilon'] = 0.0
         
-
+        logger.info(f"Testing the performance after GPI iteration {GPI_iter}")
+        
+        # Do different things depending on if we are using the tabular or function approximation agent
+        if CONFIG['tabular']:
+            q_table_string = 'tab_' + CONFIG['setup'] + f'\\q_tables\\q_table_seller_after_GPI_{GPI_iter}.csv'
+            logger.info(f"Using q_table: {q_table_string}")
+            q_table = load_q_table(q_table_string)
+            market_params[3]['sellers'][CONFIG['rl_index']][2]['q_table_seller'] = q_table
+            
+        
+        elif CONFIG['function_approximation']:
+            # a warning for swapping to GPU: 
+            #
+            # If the model was saved on a GPU and is now being loaded on a CPU (or vice versa), you'll need to specify the map_location parameter in torch.load() to handle this.
+            #
+            # Initialize the network architecture
+            neural_net = NeuralNet()
+            # Path to the saved newtork
+            neural_net_string = os.path.join(CONFIG["weights"], f'network_at_GPI_{GPI_iter}.pth')
+            logger.info(f"Using neural network: {neural_net_string}")
+            # Load the network with the saved parameters
+            try:
+                state_dict = torch.load(neural_net_string)
+                neural_net.load_state_dict(state_dict)
+                logger.info("Neural network parameters successfully loaded.")
+            except Exception as e:
+                logger.error(f"Error loading neural network parameters from {neural_net_string}: {e}")
+            
+            market_params[3]['sellers'][CONFIG['rl_index']][2]['neural_net'] = neural_net
+            
+        
+        market_params[3]['sellers'][CONFIG['rl_index']][2]['epsilon'] = 0.0
         cumulative_stats = test_policy(episodes=CONFIG['test_episodes'], market_params=market_params)
 
         # Log the performance statistics

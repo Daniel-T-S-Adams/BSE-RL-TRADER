@@ -1,4 +1,4 @@
-# tabular RL, folder handling 
+# folder handling 
 
 
 import os

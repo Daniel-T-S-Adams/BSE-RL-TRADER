@@ -21,7 +21,7 @@ CONFIG = {
     # Parameters for the Agent 
     "eps_per_evaluation": 1, # change to eps per GPI iter
     "num_GPI_iter": 1000,
-    "GPI_CSV_save_freq": 500,
+    "GPI_save_freq": 500,
     "test_episodes": 500,
     "gamma": 0.3,
     "epsilon_start": 1.0,
@@ -41,7 +41,7 @@ CONFIG = {
 
 #### Parameters for the Agent
 CONFIG["total_eps"] = CONFIG["eps_per_evaluation"] * CONFIG["num_GPI_iter"] # total number of episodes
-CONFIG["GPI_test_freq"] = CONFIG["GPI_CSV_save_freq"] * 1 # how often we test, must be a multiple of GPI_CSV_save_freq since we need to load CSV file for testing.
+CONFIG["GPI_test_freq"] = CONFIG["GPI_save_freq"] * 1 # how often we test, must be a multiple of GPI_save_freq since we need to load CSV file for testing.
 CONFIG["action_space"] =  [n/1.0 for n in range(CONFIG["bse_sys_maxprice"] - CONFIG["bse_sys_minprice"] + 1)]  # This allows any price on the BSE. Determined by the BSE min and max.
 
 

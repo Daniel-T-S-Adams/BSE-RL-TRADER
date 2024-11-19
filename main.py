@@ -17,10 +17,10 @@ elif CONFIG['tabular']:
     # Import the main function for training
     from tab_train_trader import train
 
-    # Import the main function for testing
-    from tab_Test_Policies import Test_all_policies
 
 
+# Import the main function for testing
+from test_Policies import Test_all_policies
 
 ## Shared Imports : ## 
 # Import function that creates subfolders
