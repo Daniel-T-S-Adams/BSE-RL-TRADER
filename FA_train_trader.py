@@ -104,6 +104,8 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) :
     neural_network = NeuralNet()
     optimizer = optim.Adam(neural_network.parameters(), lr=0.001)
     criterion = nn.MSELoss()
+    # initialise the neural network
+    market_params[3]['sellers'][CONFIG['rl_index']][2]['neural_net'] = neural_network
     
     ## Run the GPI iterations: ##
     

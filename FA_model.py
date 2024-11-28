@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
+from typing import List, Dict, DefaultDict, Tuple
 
 from config.config_params import CONFIG
 

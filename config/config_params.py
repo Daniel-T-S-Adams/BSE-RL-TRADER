@@ -7,7 +7,7 @@ import os
 from collections import defaultdict
 
 # Imports from Third Party Libraries
-from FA_model import NeuralNet
+# from FA_model import NeuralNet
 
 
 CONFIG = {
@@ -20,8 +20,8 @@ CONFIG = {
     
     # Parameters for the Agent 
     "eps_per_evaluation": 1, # change to eps per GPI iter
-    "num_GPI_iter": 1000,
-    "GPI_save_freq": 500,
+    "num_GPI_iter": 500,
+    "GPI_save_freq": 250,
     "test_episodes": 500,
     "gamma": 0.3,
     "epsilon_start": 1.0,
@@ -123,9 +123,8 @@ elif CONFIG['function_approximation']:
     'parameters' : os.path.join('FA_' + CONFIG["setup"], 'Parameters.py'),
    }
     CONFIG = CONFIG | CONFIG_FA # combine to the main dictionary
-    CONFIG["initial neural net"] = NeuralNet() # initialise the neural network
     
-    sellers_spec = [('GVWY',19), ('RL_FA', 1, {'epsilon': CONFIG['epsilon_start'], 'action_space': CONFIG['action_space'], 'neural_net': CONFIG['initial neural net']})]
+    sellers_spec = [('GVWY',19), ('RL_FA', 1, {'epsilon': CONFIG['epsilon_start'], 'action_space': CONFIG['action_space'], 'neural_net': 'placeholder to be initialised later'})]
     # Loop through to find the index of the RL agent
     for i, seller in enumerate(sellers_spec):
         if seller[0] == 'RL_FA':  # Check if the first element matches 'RL_FA'
