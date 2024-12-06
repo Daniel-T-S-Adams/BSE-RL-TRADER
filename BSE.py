@@ -64,6 +64,11 @@ from collections import defaultdict
 from tqdm import tqdm
 import numpy as np
 
+import torch
+from torch import nn, Tensor
+from torch.optim import Adam
+from FA_model import NeuralNet
+
 # Importing Global Parameters
 from config.config_params import CONFIG
 
@@ -144,7 +149,7 @@ def get_observation(type, lob, countdown, order):
         observation.extend([type_code, float(order)])
 
     if CONFIG['total_orders']:
-        observation.extend([float(lob.bids.n_orders), float(lob.asks.n_orders)])
+        observation.extend([float(lob['bids']['n']), float(lob['asks']['n'])])
         
     if CONFIG['time_left']:
         if not (0 <= countdown <= 1):
@@ -152,7 +157,7 @@ def get_observation(type, lob, countdown, order):
         observation.append(float(countdown))
         
     if CONFIG['binary_flag']:
-        observation.extend([0 if lob.bids.n_orders == 0 else 1, 0 if lob.asks.n_orders == 0 else 1])
+        observation.extend([0 if lob['bids']['n'] == 0 else 1, 0 if lob['asks']['n'] == 0 else 1])
     
     return tuple(observation)  # Convert list to tuple
 
@@ -2114,6 +2119,130 @@ class RLAgent(Trader):
         return None
     
 
+class Trader_DRL(RLAgent):
+    def __init__(
+            self,
+            ttype, 
+            tid, 
+            balance, 
+            params, 
+            time, 
+            gamma=0.3, 
+            epsilon=0.9,
+    ):
+        
+        super().__init__(ttype, tid, balance, params, time)
+        # self.state_size = self.obs_space.n
+        
+        # self.learning_rate = learning_rate
+
+        self.max_order_price = bse_sys_maxprice/2
+        self.max_bse_price = bse_sys_maxprice
+
+        self.q_network = NeuralNet(dims=CONFIG["nn_dims"])
+        self.value_optim = Adam(self.q_network.parameters(), lr=1e-3, eps=1e-3)
+
+        # Check if they gave different parameters
+        if type(params) is dict:
+            if 'action_space' in params:
+                self.action_space = params['action_space']
+            # if 'max_order_price' in params:
+            #     self.max_order_price = params['max_order_price']
+            if 'value_func' in params:
+                self.q_network.load_state_dict(params['neural_net'].state_dict())
+            if 'epsilon' in params:
+                self.epsilon = params['epsilon']
+            # if 'norm_params' in params:
+            #     self.norm_params = params['norm_params']
+
+        self.action_size = len(self.action_space)
+
+        # Calculate the allowed upper bound for the profit margin
+        profit_upperbound = (self.max_bse_price / self.max_order_price) - 1
+        # Calculate step size based on upper bound and number of actions
+        self.profit_stepsize = profit_upperbound/(self.action_size - 1)
+        
+
+    def normalise_state(self, state: np.ndarray) -> np.ndarray:
+        """
+        Normalises the current state using the mean and 
+        standard deviation of the training data.
+        """
+        if self.norm_params is None:
+            return state
+        
+        mean, std = self.norm_params
+        return (state - mean) / std
+    
+
+    def q_value_function(self, state, action):
+        """
+        Compute the Q-value for a given state-action pair using the Q-network.
+
+        Args:
+            state (torch.Tensor): A tensor representing the current state. 
+                        The shape should be compatible with the input of the Q-network.
+            action (int): The index representing the action taken. 
+                        Should be an integer in the range [0, action_size-1].
+
+        Returns:
+            float: The estimated Q-value for the given state-action pair.
+        """
+        action_one_hot = torch.zeros(self.action_size)
+        action_one_hot[action] = 1
+        state_action = torch.cat([state, action_one_hot])
+        q_value = self.q_network(state_action.unsqueeze(0))
+        return q_value.item()
+
+    
+    def getorder(self, time, countdown, lob):     
+        if len(self.orders) < 1:
+            order = None
+        else:
+            order_type = self.orders[0].otype
+
+            # Extract relevant features from the lob
+            obs = get_observation(self.type, lob, countdown, self.orders[0].price)
+            norm_obs = self.normalise_state(obs)
+            state = torch.tensor(norm_obs, dtype=torch.float32).flatten()
+
+            # Use epsilon-greedy strategy for action selection
+            if random.uniform(0, 1) < self.epsilon:
+                # Explore: sample a random action
+                action = random.sample(self.action_space)
+            else:
+                # Exploit: select the action with the highest Q-value
+                q_values = [self.q_value_function(state, action) for action in self.action_space]
+                action = self.action_space[np.argmax(q_values)]
+
+            # # Calculate the quote based on the action
+            # if self.type == 'Buyer':
+            #     quote = self.orders[0].price * (1 - self.profit_stepsize * action)
+            # elif self.type == 'Seller':
+            #     quote = self.orders[0].price * (1 + self.profit_stepsize * action)
+
+            # Check if it's a bad bid
+            if self.type == 'Buyer' and action > self.orders[0].price:
+                action = self.orders[0].price
+
+            # Check if it's a bad ask
+            elif self.type == 'Seller' and action < self.orders[0].price:
+                action = self.orders[0].price
+
+            order = Order(self.tid, order_type, action, self.orders[0].qty, time, lob['QID'])
+            self.lastquote = order
+
+            # Track the latest state, action and reward
+            reward = 0.0 
+            self.states.append(obs)
+            self.actions.append(action)
+            self.rewards.append(reward)
+
+            return order
+
+
+    
+
 ########################---trader-types have all been defined now--################
 
 
@@ -2195,6 +2324,8 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             return Trader_PRZI('PRDE', name, balance, parameters, time0)
         elif robottype == 'RL_tabular':
             return RLAgent('RL_tabular', name, balance, parameters, time0)
+        elif robottype == 'RL_FA':
+            return Trader_DRL('RL_FA', name, balance, parameters, time0)
         else:
             sys.exit('FATAL: don\'t know robot type %s\n' % robottype)
 
@@ -2257,6 +2388,8 @@ def populate_market(traders_spec, traders, shuffle, verbose):
             
             # actions = trader_params.get('action_space')
             # parameters['action_space'] = actions
+        if ttype == 'RL_FA':
+            parameters = trader_params
                 
         return parameters
 

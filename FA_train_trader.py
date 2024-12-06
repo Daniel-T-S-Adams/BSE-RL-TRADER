@@ -101,7 +101,7 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) :
     targets = torch.empty((0, 1), dtype=torch.float32)
     
     # initialise the model
-    neural_network = NeuralNet()
+    neural_network = NeuralNet(dims=CONFIG["nn_dims"])
     optimizer = optim.Adam(neural_network.parameters(), lr=0.001)
     criterion = nn.MSELoss()
     # initialise the neural network
@@ -130,7 +130,7 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) :
         if episode % CONFIG["eps_per_evaluation"] == 0: 
             # Normalize the data before training 
             try:
-                inputs, targets = normalize_data_min_max(inputs, targets)
+                inputs, targets, _ = normalize_data_min_max(inputs, targets)
             except Exception as e:
                 logger.error(f"Error normalizing data in GPI iter {GPI_iter}: {e}")
                 
@@ -144,6 +144,7 @@ def train(total_eps: int, market_params: tuple, epsilon_start: float) :
             
             # update the market parameter with the newest neural network
             market_params[3]['sellers'][CONFIG['rl_index']][2]['neural_net'] = neural_network
+            # pass in norm params
 
 
 
